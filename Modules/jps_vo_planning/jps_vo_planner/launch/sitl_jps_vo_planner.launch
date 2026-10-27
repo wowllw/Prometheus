@@ -1,0 +1,34 @@
+<launch>
+  <!-- Simulation bundle used by Scripts/simulation/ego_planner/new_test_jps_vo_p450_d435i.sh:
+       jps_vo_planner.launch (planner node) + the unmodified traj_server_for_prometheus.
+       Replaces ego_planner/new_test_exp_ego_planner.launch; never start both (same output topics; the node refuses
+       to publish while uav1_ego_planner_node is running). -->
+  <arg name="uav_id" default="1"/>
+  <arg name="planner_mode" default="coupled"/>
+  <arg name="group" default="g6"/>
+  <arg name="log_dir" default=""/>
+  <arg name="max_vel" default="1.0"/>
+  <arg name="max_acc" default="0.8"/>
+  <arg name="replan_period" default="1.0"/>
+  <arg name="pre_rotate_yaw" default="true"/>
+
+  <include file="$(find jps_vo_planner)/launch/jps_vo_planner.launch">
+    <arg name="uav_id" value="$(arg uav_id)"/>
+    <arg name="planner_mode" value="$(arg planner_mode)"/>
+    <arg name="group" value="$(arg group)"/>
+    <arg name="log_dir" value="$(arg log_dir)"/>
+    <arg name="max_vel" value="$(arg max_vel)"/>
+    <arg name="max_acc" value="$(arg max_acc)"/>
+    <arg name="replan_period" value="$(arg replan_period)"/>
+    <arg name="pre_rotate_yaw" value="$(arg pre_rotate_yaw)"/>
+  </include>
+
+  <!-- trajectory server: identical to the ego_planner launch, binary reused from package ego_planner -->
+  <arg name="yaw_init" default="0.0"/>
+  <node pkg="ego_planner" name="uav$(arg uav_id)_traj_server_for_prometheus" type="traj_server_for_prometheus" output="screen">
+    <param name="uav_id" value="$(arg uav_id)"/>
+    <param name="control_flag" value="0"/>
+    <param name="traj_server/time_forward" value="1.0"/>
+    <param name="traj_server/last_yaw" value="$(arg yaw_init)"/>
+  </node>
+</launch>

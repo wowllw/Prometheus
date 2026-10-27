@@ -1,0 +1,36 @@
+# [File name] scenario_static_only.yaml
+# [File purpose] Gazebo scenario configuration: static obstacles only (planning_easy.world cylinder field, no
+#   dynamic obstacles). Verifies global planning (3D-JPS path quality, static safety, timing) for all 6 groups.
+# Consumers: dyn_obstacles.py (_scenario:=<this file> _variant:=<name>; spawns nothing here) and the
+#   experiment driver (reads uav.goal / timeout). Geometry checked by scripts/check_scenarios.py.
+#
+# World facts used (planning_easy.world): 39 cylinders in x [-5, 11], y [-7, 5.1];
+#   small r 0.25 (worst case), 0-3.0 m or 0.5-3.5 m tall; large r 0.4, 0.5-2.5 m tall.
+#   Flight band z [0.5, 3.0] (ego map). No flying over cylinders is possible: z >= 2.5 + r_infl > 3.0.
+# UAV spawn is fixed at the world origin (uav1_init_x/y = 0): odom (GPS local frame) = Gazebo world frame
+#   only for that spawn. NEVER change the spawn point (see experiment_run_notes.md N-3).
+
+scenario: static_only
+world: planning_easy.world
+prefix: dyn_obs_
+obstacles: []
+
+uav:
+  spawn: [0.0, 0.0, 0.15]   # fixed by the start script
+  hover: [0.0, 0.0, 1.5]    # Init_Pos_Hover after arm_and_command.sh (takeoff + 1.5 m)
+
+variants:
+  # Shortest-route lengths below: 8-connected 0.1 m grid, cylinders inflated by worst-case r + r_infl
+  # (r_infl = 0.4 + d_min). Reference values for the timeout only, not results.
+  S1_east:
+    uav: {goal: [13.0, 0.0, 1.5]}
+    route_length_ref: {d_min_0.1: 13.8, d_min_0.2: 13.9, d_min_0.3: 15.5}   # straight line 13.0
+    timeout: 70.0           # 3 * 15.5 / v_c + 12 s (rounded); see run notes N-9
+  S2_north:
+    uav: {goal: [0.0, 14.0, 1.5]}
+    route_length_ref: {d_min_0.1: 14.6, d_min_0.2: 14.7, d_min_0.3: 14.7}   # straight line 14.0
+    timeout: 70.0
+  S3_climb_ne:              # 3D: goal 0.7 m above the hover height
+    uav: {goal: [12.0, 5.0, 2.2]}
+    route_length_ref: {d_min_0.1: 14.1, d_min_0.2: 14.1, d_min_0.3: 14.1}   # straight line 13.0 (xy)
+    timeout: 70.0

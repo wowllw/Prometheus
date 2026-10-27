@@ -1,0 +1,60 @@
+# [File name] scenario_multi_dynamic.yaml
+# [File purpose] Gazebo scenario configuration: three constant-velocity dynamic obstacles moving at the same
+#   time around the UAV's route north of the cylinder field. One patrols across the field exit (the corridor
+#   the global path uses), one crosses the route from the right, one comes head-on. Tests the coupling
+#   mechanism: risk written into the global edge weights (C2), guidance-cone conflicts (C3), adaptive lambda.
+# Consumers: dyn_obstacles.py (_scenario:=<this file> _variant:=M1_three_way _seed:=<k>) and the experiment
+#   driver. Geometry checked by scripts/check_scenarios.py.
+#
+# Obstacles never meet each other (checked), never touch a static cylinder (checked) and each one has a
+# nominal conflict (d_cpa < R_o) with the UAV flying the static route at v_c (checked), i.e. without
+# avoidance each would cause a collision.
+
+scenario: multi_dynamic
+world: planning_easy.world
+prefix: dyn_obs_
+uav:
+  spawn: [0.0, 0.0, 0.15]
+  hover: [0.0, 0.0, 1.5]
+  goal: [0.0, 14.0, 1.5]
+timeout: 80.0
+
+variants:
+  M1_three_way:
+    expected_encounters: [dyn_obs_0, dyn_obs_1, dyn_obs_2]
+    obstacles:
+      - name: dyn_obs_0                   # patrol across the field exit (blocks the JPS corridor)
+        radius: 0.3
+        start: [-3.0, 7.2, 1.5]
+        velocity: [0.4, 0.0, 0.0]
+        duration: 12.5                    # pingpong between x = -3.0 and x = +2.0
+        mode: pingpong
+        trigger_point: [-0.4, 3.0, 1.5]   # inside the field, ~5 s before the exit
+        trigger_radius: 1.2
+        start_delay: 0.0
+        jitter_pos: 0.15
+        jitter_speed: 0.03
+
+      - name: dyn_obs_1                   # crossing from the right at y = 9
+        radius: 0.3
+        start: [2.4, 9.0, 1.5]
+        velocity: [-0.5, 0.0, 0.0]
+        duration: 14.0
+        mode: once
+        trigger_point: [-0.7, 5.0, 1.5]
+        trigger_radius: 1.0
+        start_delay: 0.0
+        jitter_pos: 0.10
+        jitter_speed: 0.03
+
+      - name: dyn_obs_2                   # head-on along the route, later than dyn_obs_1
+        radius: 0.3
+        start: [0.08, 14.8, 1.5]
+        velocity: [-0.047, -0.498, 0.0]
+        duration: 11.0                    # stops at y >= 8.75 (with +speed jitter), clear of the patrol line y = 7.2
+        mode: once
+        trigger_point: [-0.7, 5.0, 1.5]
+        trigger_radius: 1.0
+        start_delay: 1.0
+        jitter_pos: 0.10
+        jitter_speed: 0.05

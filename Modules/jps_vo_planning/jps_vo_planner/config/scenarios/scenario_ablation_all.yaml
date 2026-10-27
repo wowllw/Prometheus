@@ -1,0 +1,148 @@
+# [File name] scenario_ablation_all.yaml
+# [File purpose] Unified Gazebo scenario configuration for the Subtask-4 ablation: all 6 variants in one file
+#   (3 static, 2 single-dynamic, 1 multi-dynamic). Same geometry, goals, timeouts and obstacle parameters as
+#   scenario_static_only.yaml, scenario_single_dynamic.yaml and scenario_multi_dynamic.yaml, which were run in
+#   the R1-R6 closed-loop validation (2026-10-26); those three files stay unchanged as the R1-R6 record.
+#
+# Consumers (unchanged scripts, no code change needed):
+#   dyn_obstacles.py  _scenario:=<this file> _variant:=<name> _seed:=<k> _log_dir:=<dir>
+#   send_goal.py      _scenario:=<this file> _variant:=<name>
+#   check_scenarios.py <this file> --d_min 0.2 --seeds 1-20
+#   batch driver      reads variants.<name>.{class, timeout, uav.goal} (experiment_batch_run_notes.md)
+# load_scenario() merges a variant over the top level (one level deep for dicts), so each variant below
+# overrides uav.goal / timeout / obstacles and keeps uav.spawn / uav.hover.
+#
+# Flight band: map/z_min = 0.8 m, map/z_max = 3.0 m (fixed 2026-10-26, unified R1-R6 configuration).
+#   The block `flight_band` is a RECORD for the batch driver to assert against; the planner reads the
+#   authoritative value from config/jps_vo_params.yaml (map/z_min) and the ego baseline from ground_height.
+#   Neither consumer script reads `flight_band`.
+#   Every goal (z 1.5 / 2.2) and every obstacle centre (z 1.5 +- jitter 0.15, r_o 0.3) lies inside
+#   [0.8, 3.0]: obstacle extent >= 1.05 m.
+#
+# World facts (planning_easy.world): 39 cylinders in x [-5, 11], y [-7, 5.1]; small r 0.25, large r 0.4;
+#   no flying over cylinders (z >= 2.5 + r_infl > 3.0).
+# UAV spawn fixed at the world origin: odom frame = Gazebo world frame only for this spawn (run notes N-3).
+#
+# Seeds: evaluation seeds 1-20 (identical for every group). In dynamic variants the seed jitters each
+#   obstacle's start (+-jitter_pos per axis) and speed (+-jitter_speed); drawn values are written to
+#   <log_dir>/dyn_obstacles_seed<k>.yaml. Static variants have no seeded input: their 20 repetitions only
+#   sample simulator / timing nondeterminism (spec section 5).
+
+prefix: dyn_obs_
+world: planning_easy.world
+
+flight_band: {z_min: 0.8, z_max: 3.0}     # record only, see header
+
+uav:
+  spawn: [0.0, 0.0, 0.15]   # fixed by the start script
+  hover: [0.0, 0.0, 1.5]    # Init_Pos_Hover after arm_and_command.sh (Takeoff_height 1.5 m)
+
+obstacles: []               # default: no dynamic obstacle (static variants)
+
+variants:
+  # ---------------------------------------------------------------- static (no dynamic obstacle)
+  S1_east:
+    class: static
+    scenario: static_only
+    uav: {goal: [13.0, 0.0, 1.5]}
+    timeout: 70.0
+    expected_encounters: []
+    route_length_ref: 13.9  # d_min 0.2, offline 0.1 m grid (check_scenarios.py); reference, not a result
+  S2_north:
+    class: static
+    scenario: static_only
+    uav: {goal: [0.0, 14.0, 1.5]}
+    timeout: 70.0
+    expected_encounters: []
+    route_length_ref: 14.7
+  S3_climb_ne:              # 3D: goal 0.7 m above the hover height
+    class: static
+    scenario: static_only
+    uav: {goal: [12.0, 5.0, 2.2]}
+    timeout: 70.0
+    expected_encounters: []
+    route_length_ref: 14.1
+
+  # ---------------------------------------------------------------- single dynamic obstacle
+  # r_o 0.3 m, |v_o| 0.5 m/s, released when the UAV enters trigger_radius of the field exit
+  head_on:
+    class: single_dynamic
+    scenario: single_dynamic
+    uav: {goal: [0.0, 14.0, 1.5]}
+    timeout: 70.0
+    expected_encounters: [dyn_obs_0]
+    route_length_ref: 14.7
+    obstacles:
+      - name: dyn_obs_0
+        radius: 0.3
+        start: [0.08, 14.8, 1.5]          # beyond the goal, on the extension of exit -> goal
+        velocity: [-0.047, -0.498, 0.0]   # along goal -> exit
+        duration: 15.0
+        mode: once
+        trigger_point: [-0.7, 5.0, 1.5]
+        trigger_radius: 1.0
+        start_delay: 0.0
+        jitter_pos: 0.10
+        jitter_speed: 0.05
+  crossing_90:
+    class: single_dynamic
+    scenario: single_dynamic
+    uav: {goal: [0.0, 14.0, 1.5]}
+    timeout: 70.0
+    expected_encounters: [dyn_obs_0]
+    route_length_ref: 14.7
+    obstacles:
+      - name: dyn_obs_0
+        radius: 0.3
+        start: [-4.4, 10.5, 1.5]          # left of the route, crosses it at y = 10.5
+        velocity: [0.5, 0.0, 0.0]
+        duration: 16.0
+        mode: once
+        trigger_point: [-0.7, 5.0, 1.5]
+        trigger_radius: 1.0
+        start_delay: 0.0
+        jitter_pos: 0.10
+        jitter_speed: 0.03
+
+  # ---------------------------------------------------------------- multiple dynamic obstacles
+  M1_three_way:
+    class: multi_dynamic
+    scenario: multi_dynamic
+    uav: {goal: [0.0, 14.0, 1.5]}
+    timeout: 80.0
+    expected_encounters: [dyn_obs_0, dyn_obs_1, dyn_obs_2]
+    route_length_ref: 14.7
+    obstacles:
+      - name: dyn_obs_0                   # patrol across the field exit (blocks the JPS corridor)
+        radius: 0.3
+        start: [-3.0, 7.2, 1.5]
+        velocity: [0.4, 0.0, 0.0]
+        duration: 12.5                    # pingpong between x = -3.0 and x = +2.0
+        mode: pingpong
+        trigger_point: [-0.4, 3.0, 1.5]
+        trigger_radius: 1.2
+        start_delay: 0.0
+        jitter_pos: 0.15
+        jitter_speed: 0.03
+      - name: dyn_obs_1                   # crossing from the right at y = 9
+        radius: 0.3
+        start: [2.4, 9.0, 1.5]
+        velocity: [-0.5, 0.0, 0.0]
+        duration: 14.0
+        mode: once
+        trigger_point: [-0.7, 5.0, 1.5]
+        trigger_radius: 1.0
+        start_delay: 0.0
+        jitter_pos: 0.10
+        jitter_speed: 0.03
+      - name: dyn_obs_2                   # head-on along the route, 1 s after dyn_obs_1
+        radius: 0.3
+        start: [0.08, 14.8, 1.5]
+        velocity: [-0.047, -0.498, 0.0]
+        duration: 11.0
+        mode: once
+        trigger_point: [-0.7, 5.0, 1.5]
+        trigger_radius: 1.0
+        start_delay: 1.0
+        jitter_pos: 0.10
+        jitter_speed: 0.05

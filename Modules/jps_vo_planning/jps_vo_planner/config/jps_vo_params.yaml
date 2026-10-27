@@ -1,0 +1,84 @@
+# [File] jps_vo_params.yaml: all parameters of jps_vo_planner_node (ModelConstants, CoreConfig, map/grid input).
+# Load order (launch/jps_vo_planner.launch): this file -> config/groups/<group>.yaml (switches) -> launch overrides.
+#
+# The 6 ablation modes (spec section 3) are the group files, switches only:
+#   g1 pure 3D-JPS        lambda_mode zero
+#   g2 pure VO            lambda_mode one, use_rho_in_pure_vo false (classic eq. 16)
+#   g3 one-way series     enable_c2 false, enable_c3 false
+#   g4 no adaptive lambda lambda_mode const:0.5
+#   g5 no Gamma           enable_gamma false
+#   g6 full C1/C2/C3      all on (defaults below are identical to g6)
+
+# uniform B-spline knot interval [s]
+ctrl_pt_dt: 0.1
+# stub mode: replanning stops when the reference is closer than this to the goal [m]
+goal_tolerance: 0.2
+
+# map box, identical to the ego_planner baseline (map_size 50 x 50 x 3, origin -25, ground_height 0.5)
+map:
+  x_min: -25.0
+  x_max: 25.0
+  y_min: -25.0
+  y_max: 25.0
+  z_min: 0.8         # raised from 0.5 (2026-10-26, R5 floor-layer deadlock); ego baseline ground_height 0.8 as well
+  z_max: 3.0
+
+# ---------------- coupled mode (Subtask 3) ----------------
+# Frozen constants (subtask4_ablation_experiment_spec.md section 2). v_max / a_max come from max_vel / max_acc.
+# Calibratable only: v_max, a_max, d_min, tau1, tau2 (tau <= 0: derived from eq. 32).
+model:
+  r_q: 0.30
+  e_cut: 0.10
+  v_c: 0.80
+  dt: 0.10            # Delta_t, local cycle period [s]
+  tau_h: 4.0
+  m: 1.20             # risk smoothing margin of eq. (20) [m]
+  L_min: 2.0
+  psi_max_deg: 60.0
+  theta_max_deg: 60.0
+  v_min: 0.10
+  w_theta: 1.0
+  w_a: 1.0
+  rho_g: 10.0
+  eps_w: 0.05
+  T_c: 0.80
+  T_g: 1.50
+  dv_star: 1.60
+  d_min: 0.20         # Q1 (confirmed 2026-10-26)
+  r_o_max: 0.30       # largest dynamic obstacle radius of the scenario set (R_max in eq. 32)
+  tau1: -1.0          # derived: 2.214 s for d_min 0.2
+  tau2: -1.0          # derived: 12.043 s for d_min 0.2
+
+grid:
+  resolution: 0.1     # delta (decision Q3); inflation r_infl = r_q + d_min + e_cut is derived
+  rebuild_rate: 5.0   # [Hz]
+
+dyn:
+  prefix: dyn_obs_    # must match dyn_obstacles.py
+  radius: 0.3         # r_o of every scenario obstacle
+  mask_margin: 0.15
+  mask_history: 15.0
+  obstacle_timeout: 0.5
+
+# engineering choices (not model parameters; reported in planner_meta.yaml)
+jps:
+  tie_rule: strict    # eq. (7) tie rule for diagonal arrivals: strict (Harabor & Grastien) | literal  (confirmed: strict)
+  search_margin: 5.0  # [ENG-8] G_J box = start/goal bounding box + margin [m], 0 = whole map
+  snap_radius: 10     # start/goal snapping [cells]
+async_global: true    # [ENG-11] global step in its own thread
+pre_rotate_yaw: true  # yaw towards the goal before planning (changed 2026-10-26 after the R3 blind-start collision)
+goal_reached_pos: 0.3 # run notes S-1
+goal_reached_vel: 0.1
+switch_threshold: 0.3 # Hausdorff distance counted as a global path switch (M6)
+
+# default switches (= g6); the group file loaded after this one overrides them
+switches:
+  lambda_mode: adaptive
+  use_rho_in_pure_vo: false
+  enable_c2: true
+  enable_c3: true
+  c3_soft_tracking: 0.0
+  enable_gamma: true
+  lambda_shape: quintic_log
+  theta_c_mode: linear
+  xi_source: reference

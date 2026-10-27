@@ -1,0 +1,53 @@
+# [File name] scenario_single_dynamic.yaml
+# [File purpose] Gazebo scenario configuration: one constant-velocity dynamic obstacle (sphere, r_o = 0.3 m,
+#   |v_o| = 0.5 m/s) meeting the UAV in the open area north of the cylinder field. Two variants:
+#   head_on (obstacle flies along the UAV's route towards it) and crossing_90 (obstacle crosses the route at
+#   90 deg). Tests VO avoidance and the coupling under a single encounter.
+# Consumers: dyn_obstacles.py (_scenario:=<this file> _variant:=head_on|crossing_90 _seed:=<k>) and the
+#   experiment driver (uav.goal, timeout, expected_encounters). Geometry checked by scripts/check_scenarios.py.
+#
+# Route geometry (from the static shortest route to the goal, all d_min in {0.1, 0.2, 0.3}): the UAV leaves
+# the cylinder field at about (-0.7, 6.0) and flies almost straight to (0, 14) through obstacle-free space.
+# Every obstacle starts when the UAV enters trigger_radius of trigger_point (the field exit), so the
+# encounter geometry does not depend on takeoff timing. Seeds jitter start position (+-jitter_pos per axis)
+# and speed (+-jitter_speed); the drawn values are logged by dyn_obstacles.py.
+
+scenario: single_dynamic
+world: planning_easy.world
+prefix: dyn_obs_
+uav:
+  spawn: [0.0, 0.0, 0.15]
+  hover: [0.0, 0.0, 1.5]
+  goal: [0.0, 14.0, 1.5]
+timeout: 70.0
+
+variants:
+  head_on:
+    expected_encounters: [dyn_obs_0]
+    obstacles:
+      - name: dyn_obs_0
+        radius: 0.3
+        start: [0.08, 14.8, 1.5]          # on the extension of exit -> goal, beyond the goal
+        velocity: [-0.047, -0.498, 0.0]   # |v_o| = 0.5, along goal -> exit
+        duration: 15.0                    # ends near (-0.62, 7.3), clear of the field
+        mode: once
+        trigger_point: [-0.7, 5.0, 1.5]
+        trigger_radius: 1.0
+        start_delay: 0.0
+        jitter_pos: 0.10
+        jitter_speed: 0.05
+
+  crossing_90:
+    expected_encounters: [dyn_obs_0]
+    obstacles:
+      - name: dyn_obs_0
+        radius: 0.3
+        start: [-4.4, 10.5, 1.5]          # left of the route, crosses it at y = 10.5
+        velocity: [0.5, 0.0, 0.0]
+        duration: 16.0
+        mode: once
+        trigger_point: [-0.7, 5.0, 1.5]
+        trigger_radius: 1.0
+        start_delay: 0.0
+        jitter_pos: 0.10                  # crossing timing is sensitive: tighter jitter (check_scenarios.py)
+        jitter_speed: 0.03

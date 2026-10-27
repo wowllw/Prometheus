@@ -1,0 +1,11 @@
+# [Group 2] pure VO (Stage-2 A2, classic eq. 16): lambda == 1, no smooth TTC term rho
+switches:
+  lambda_mode: one
+  use_rho_in_pure_vo: false
+  enable_c2: true
+  enable_c3: true
+  c3_soft_tracking: 0.0
+  enable_gamma: true
+  lambda_shape: quintic_log
+  theta_c_mode: linear
+  xi_source: reference

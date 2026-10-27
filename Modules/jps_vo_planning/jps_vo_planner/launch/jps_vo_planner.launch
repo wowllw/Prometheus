@@ -1,0 +1,76 @@
+<launch>
+  <!-- [File] jps_vo_planner.launch: jps_vo_planner_node only (traj_server_for_prometheus is added by
+       sitl_jps_vo_planner.launch). Parameters: config/jps_vo_params.yaml, then config/groups/<group>.yaml, then
+       any non-empty switch argument below (overrides for single runs; the ablation itself uses the group files). -->
+
+  <!-- the Prometheus stack runs on wall clock; every time stamp of this node assumes it -->
+  <param name="/use_sim_time" value="false"/>
+
+  <arg name="uav_id" default="1"/>
+  <arg name="odometry_topic" default="/mavros/local_position/odom"/>
+  <arg name="planner_mode" default="coupled"/>   <!-- stub (Subtask 2) | coupled (Subtask 3) -->
+  <arg name="group" default="g6"/>               <!-- g1 pure JPS | g2 pure VO | g3 series | g4 lambda const | g5 no Gamma | g6 full -->
+  <arg name="label" default="$(arg group)"/>     <!-- mode label in logs / cycles.csv "mode" column; change it when overriding -->
+  <arg name="log_dir" default=""/>
+  <arg name="max_vel" default="1.0"/>            <!-- v_max (confirmed 1.0 = PX4 COMMAND cap); cruise v_c = 0.8 in the yaml -->
+  <arg name="max_acc" default="0.8"/>            <!-- a_max (calibratable) -->
+  <arg name="d_min" default=""/>                 <!-- calibratable; "" = yaml value (0.2) -->
+  <arg name="tau1" default=""/>                  <!-- calibratable; "" = yaml (-1: eq. 32) -->
+  <arg name="tau2" default=""/>
+  <arg name="replan_period" default="1.0"/>
+  <arg name="pre_rotate_yaw" default="true"/>
+
+  <!-- ablation switch overrides ("" = keep the group file value) -->
+  <arg name="lambda_mode" default=""/>           <!-- adaptive | zero | one | const:<c> -->
+  <arg name="use_rho_in_pure_vo" default=""/>
+  <arg name="enable_c2" default=""/>
+  <arg name="enable_c3" default=""/>
+  <arg name="c3_soft_tracking" default=""/>
+  <arg name="enable_gamma" default=""/>
+  <arg name="lambda_shape" default=""/>          <!-- quintic_log | linear | logistic -->
+  <arg name="theta_c_mode" default=""/>          <!-- linear | sqrt | fixed:<deg> -->
+  <arg name="xi_source" default=""/>             <!-- reference | executed -->
+  <arg name="tie_rule" default=""/>              <!-- strict | literal (eq. 7 tie rule, pending decision) -->
+  <arg name="search_margin" default=""/>
+  <arg name="async_global" default=""/>
+
+  <node pkg="jps_vo_planner" type="jps_vo_planner_node" name="uav$(arg uav_id)_jps_vo_planner_node" output="screen">
+    <remap from="~odom"          to="/uav$(arg uav_id)$(arg odometry_topic)"/>
+    <remap from="~cloud"         to="/uav$(arg uav_id)/octomap_point_cloud_centers"/>
+    <remap from="~goal"          to="/uav$(arg uav_id)/prometheus/motion_planning/goal"/>
+    <remap from="~goal_alt"      to="/move_base_simple/goal"/>
+    <remap from="~control_state" to="/uav$(arg uav_id)/prometheus/control_state"/>
+    <remap from="~bspline"       to="/uav$(arg uav_id)/planning/bspline"/>
+    <!-- traj_server_for_prometheus subscribes to the hard-coded /uav1/... gate topic -->
+    <remap from="~gate"          to="/uav$(arg uav_id)/prometheus/command/ego_command_stop_pub"/>
+    <remap from="~path"          to="/uav$(arg uav_id)/jps_vo/path"/>
+    <remap from="~uav_command"   to="/uav$(arg uav_id)/prometheus/command"/>
+
+    <rosparam command="load" file="$(find jps_vo_planner)/config/jps_vo_params.yaml"/>
+    <rosparam command="load" file="$(find jps_vo_planner)/config/groups/$(arg group).yaml"/>
+    <param name="uav_id" value="$(arg uav_id)"/>
+    <param name="planner_mode" value="$(arg planner_mode)"/>
+    <param name="group" value="$(arg label)"/>
+    <param name="log_dir" value="$(arg log_dir)"/>
+    <param name="max_vel" value="$(arg max_vel)"/>
+    <param name="max_acc" value="$(arg max_acc)"/>
+    <param name="replan_period" value="$(arg replan_period)"/>
+    <param name="pre_rotate_yaw" value="$(arg pre_rotate_yaw)"/>
+
+    <param if="$(eval arg('d_min') != '')"              name="model/d_min"                 value="$(arg d_min)"/>
+    <param if="$(eval arg('tau1') != '')"               name="model/tau1"                  value="$(arg tau1)"/>
+    <param if="$(eval arg('tau2') != '')"               name="model/tau2"                  value="$(arg tau2)"/>
+    <param if="$(eval arg('lambda_mode') != '')"        name="switches/lambda_mode"        value="$(arg lambda_mode)" type="str"/>
+    <param if="$(eval arg('use_rho_in_pure_vo') != '')" name="switches/use_rho_in_pure_vo" value="$(arg use_rho_in_pure_vo)"/>
+    <param if="$(eval arg('enable_c2') != '')"          name="switches/enable_c2"          value="$(arg enable_c2)"/>
+    <param if="$(eval arg('enable_c3') != '')"          name="switches/enable_c3"          value="$(arg enable_c3)"/>
+    <param if="$(eval arg('c3_soft_tracking') != '')"   name="switches/c3_soft_tracking"   value="$(arg c3_soft_tracking)" type="double"/>
+    <param if="$(eval arg('enable_gamma') != '')"       name="switches/enable_gamma"       value="$(arg enable_gamma)"/>
+    <param if="$(eval arg('lambda_shape') != '')"       name="switches/lambda_shape"       value="$(arg lambda_shape)" type="str"/>
+    <param if="$(eval arg('theta_c_mode') != '')"       name="switches/theta_c_mode"       value="$(arg theta_c_mode)" type="str"/>
+    <param if="$(eval arg('xi_source') != '')"          name="switches/xi_source"          value="$(arg xi_source)" type="str"/>
+    <param if="$(eval arg('tie_rule') != '')"           name="jps/tie_rule"                value="$(arg tie_rule)" type="str"/>
+    <param if="$(eval arg('search_margin') != '')"      name="jps/search_margin"           value="$(arg search_margin)" type="double"/>
+    <param if="$(eval arg('async_global') != '')"       name="async_global"                value="$(arg async_global)"/>
+  </node>
+</launch>

@@ -1,0 +1,45 @@
+# [File name] planning_easy_cylinders.yaml
+# [File purpose] Static obstacle ground truth of planning_easy.world for scripts/check_scenarios.py.
+# Source: /gazebo/link_states read from the running world on 2026-10-25 (link centres), radii and lengths from
+# obs_cylinder_{small,large}.sdf. Radius is the worst case of collision/visual (small 0.2/0.25 -> 0.25,
+# large 0.4). Duplicate cylinders at the same x,y (cylinder4_clone_14/15) are listed once.
+cylinders:
+  - {name: cylinder6, x: -5.00, y: -2.00, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder5, x: -5.00, y: 2.00, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder3_clone_13, x: -4.98, y: -5.03, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_18, x: -4.01, y: -0.90, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder4_clone_19, x: -4.00, y: 4.29, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder3_clone_6, x: -3.99, y: 1.06, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_17, x: -3.98, y: -3.90, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder3_clone_12, x: -3.04, y: -6.02, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4, x: -2.00, y: 0.00, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_0, x: -1.98, y: 4.01, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_1, x: -1.96, y: -2.02, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder3_clone_5, x: -1.86, y: 2.10, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_16, x: -1.00, y: -3.92, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder3_clone_11, x: -0.97, y: -5.81, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_3, x: -0.02, y: -2.00, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder3_clone_4, x: 0.18, y: 2.06, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder3_clone_9, x: 1.04, y: -5.80, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_4, x: 1.92, y: 1.99, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder3_clone_3, x: 2.02, y: -4.00, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_14, x: 2.03, y: 5.11, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder1, x: 3.00, y: 0.00, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_13, x: 3.01, y: -2.04, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder3_clone_10, x: 3.03, y: -6.91, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_5, x: 3.98, y: 3.97, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder3_clone_8, x: 4.12, y: -5.91, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder3_clone_0, x: 4.15, y: -4.06, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder3, x: 5.00, y: -2.00, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder2, x: 5.00, y: 2.00, r: 0.25, z_min: 0.50, z_max: 3.50}
+  - {name: cylinder3_clone_14, x: 5.97, y: 5.00, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder3_clone_7, x: 6.06, y: -5.88, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder3_clone, x: 6.07, y: 0.14, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder7, x: 7.00, y: 3.00, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_10, x: 7.01, y: -4.02, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder3_clone_2, x: 7.02, y: -1.94, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder3_clone_1, x: 8.06, y: -0.96, r: 0.40, z_min: 0.50, z_max: 2.50}
+  - {name: cylinder8, x: 9.00, y: 3.00, r: 0.25, z_min: 0.50, z_max: 3.50}
+  - {name: cylinder4_clone_11, x: 9.07, y: 0.08, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder4_clone_12, x: 9.09, y: -2.91, r: 0.25, z_min: 0.00, z_max: 3.00}
+  - {name: cylinder9, x: 11.00, y: 3.00, r: 0.25, z_min: 0.50, z_max: 3.50}

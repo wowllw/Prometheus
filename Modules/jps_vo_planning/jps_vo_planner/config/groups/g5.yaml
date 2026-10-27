@@ -1,0 +1,11 @@
+# [Group 5] coupling without the penalty Gamma (Stage-2 A7)
+switches:
+  lambda_mode: adaptive
+  use_rho_in_pure_vo: false
+  enable_c2: true
+  enable_c3: true
+  c3_soft_tracking: 0.0
+  enable_gamma: false
+  lambda_shape: quintic_log
+  theta_c_mode: linear
+  xi_source: reference

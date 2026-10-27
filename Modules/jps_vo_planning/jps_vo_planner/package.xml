@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>jps_vo_planner</name>
+  <version>0.1.0</version>
+  <description>
+    Independent 3D-JPS + VO bidirectionally coupled planner node for Prometheus.
+    Publishes traj_utils/Bspline to the unmodified traj_server_for_prometheus.
+  </description>
+  <maintainer email="lybestyl@gmail.com">lanbaidiao</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>roscpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>gazebo_msgs</depend>
+  <depend>traj_utils</depend>
+  <depend>prometheus_msgs</depend>
+
+  <exec_depend>ego_planner</exec_depend>
+</package>
