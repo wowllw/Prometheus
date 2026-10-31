@@ -122,6 +122,37 @@ def run_extras(log_dir, eps_w=0.05, v_min=0.1, window=2.5):
     return out
 
 
+def run_timeline(log_dir, top=4):
+    """Code-generated failure timeline: height before/during/after threats, zero-speed optimum share, stall breaks,
+    the slowest global searches, and the end state."""
+    meta = _yaml(os.path.join(log_dir, 'planner_meta.yaml'))
+    t0, goal = fnum(meta.get('t0')), meta.get('goal', [0, 0, 0])
+    cyc = [r for r in _csv(os.path.join(log_dir, 'cycles.csv')) if r.get('stall_hold_remaining') not in (None, '')]
+    ext = {r['t']: r for r in _csv(os.path.join(log_dir, 'cycles_ext.csv'))}
+    if not cyc:
+        return ['no cycles']
+    p = lambda r: [fnum(r['p_ref_x']), fnum(r['p_ref_y']), fnum(r['p_ref_z'])]
+    thr = [r for r in cyc if fnum(r['lambda']) > 0]
+    out = ['goal %s; %d cycles from t0 + %.1f s to t0 + %.1f s' % (goal, len(cyc), fnum(cyc[0]['t']) - t0, fnum(cyc[-1]['t']) - t0)]
+    if thr:
+        out.append('threat phase (lambda > 0): t0 + %.1f .. %.1f s, reference height %.2f .. %.2f m' % (
+            fnum(thr[0]['t']) - t0, fnum(thr[-1]['t']) - t0, min(p(r)[2] for r in thr), max(p(r)[2] for r in thr)))
+    br = [i for i, r in enumerate(cyc) if r['stall_break_triggered'] == '1']
+    if br:
+        zo = [sum(int(fnum(ext.get(c['t'], {}).get('zero_is_opt', 0)) or 0) for c in cyc[max(0, i - 12):i]) for i in br]
+        out.append('%d stall breaks between t0 + %.1f and %.1f s at height %.2f .. %.2f m, %.2f .. %.2f m from the goal; '
+                   'lambda at the breaks %.2f .. %.2f; v = 0 was the optimum in %d .. %d of the 12 cycles before each break' % (
+                       len(br), fnum(cyc[br[0]]['t']) - t0, fnum(cyc[br[-1]]['t']) - t0, min(p(cyc[i])[2] for i in br),
+                       max(p(cyc[i])[2] for i in br), min(math.dist(p(cyc[i]), goal) for i in br),
+                       max(math.dist(p(cyc[i]), goal) for i in br), min(fnum(cyc[i]['lambda']) for i in br),
+                       max(fnum(cyc[i]['lambda']) for i in br), min(zo), max(zo)))
+    slow = sorted(((fnum(r['plan_ms_global']), fnum(r['t']) - t0, r['replan_reason']) for r in cyc if r['replan_reason'] != 'none'),
+                  reverse=True)[:top]
+    out.append('slowest global searches: %s' % ', '.join('%.0f ms (%s, t0 + %.1f s)' % (a, c, b) for a, b, c in slow))
+    out.append('end: reference %.2f m from the goal at height %.2f m' % (math.dist(p(cyc[-1]), goal), p(cyc[-1])[2]))
+    return out
+
+
 def fixes_match(meta_fixes, flags):
     """planner_meta.yaml 'fixes' block (written only when a flag is on) against the preset flags."""
     if not any(flags.values()):

@@ -591,7 +591,7 @@ def v3(R):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--repo', default=None)
-    ap.add_argument('cmd', choices=['run', 'integrity'])
+    ap.add_argument('cmd', choices=['run', 'integrity', 'stop-report'])
     ap.add_argument('--until', choices=STAGES, default='report')
     a = ap.parse_args()
     repo = a.repo or sh(['git', 'rev-parse', '--show-toplevel']).stdout.strip()
@@ -603,6 +603,14 @@ def main():
             return
         if 'stage1' in state().get('done_stages', []):
             sync_copy(R)
+        if a.cmd == 'stop-report':
+            # a protocol gate ended the run: report what was executed, commit it, verify the read-only assets
+            cur = 'stop-report'
+            import report
+            report.write(R, state(), TAG, BRANCH)
+            commit(R, L.TOUCHED, 'Stop report: pipeline ended at a protocol gate (supplementary analysis, section 4.5)')
+            integrity(R, 'stop report')
+            return
         done = state().get('done_stages', [])
         for stg in STAGES[1:STAGES.index(a.until) + 1]:
             cur = stg
