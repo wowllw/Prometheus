@@ -15,6 +15,8 @@
 Commits on `fix_coupling_artifacts`:
 
 ```
+62243d0 Pipeline update (analysis.py)
+3f1f042 Stop report: pipeline ended at a protocol gate (supplementary analysis, section 4.5)
 70ee6b8 Pipeline update (analysis.py, pipeline.py, report.py)
 3742d38 V1: preset v1_r4_r4m (V1 step v1_r4 with R4-m fallback)
 328fae4 Pipeline update (pipeline.py, report.py)
@@ -119,7 +121,7 @@ unsafe_after_r4m:
 Timeline of `/home/amov/.ros/ablation_fix/v1/v1_r4_r4m/M1_three_way/g6/seed102_a1` (generated from cycles.csv / cycles_ext.csv):
 
 - goal [0, 14, 1.5]; 822 cycles from t0 + 3.1 s to t0 + 86.4 s
-- threat phase (lambda > 0): t0 + 4.4 .. 86.4 s, reference height 1.04 .. 2.25 m
+- cycles with lambda > 0: 474 of 822; with lambda >= 0.5: 165, between t0 + 20.5 and 43.0 s, reference height 1.04 .. 2.25 m in those cycles
 - 14 stall breaks between t0 + 58.0 and 85.0 s at height 1.08 .. 1.39 m, 0.81 .. 1.36 m from the goal; lambda at the breaks 0.00 .. 0.02; v = 0 was the optimum in 11 .. 12 of the 12 cycles before each break
 - slowest global searches: 11123 ms (risk_Dk, t0 + 84.7 s), 10495 ms (risk_Dk, t0 + 73.4 s), 10107 ms (risk_Dk, t0 + 63.0 s), 9421 ms (risk_Dk, t0 + 52.9 s)
 - end: reference 0.77 m from the goal at height 1.41 m
