@@ -132,11 +132,13 @@ def run_timeline(log_dir, top=4):
     if not cyc:
         return ['no cycles']
     p = lambda r: [fnum(r['p_ref_x']), fnum(r['p_ref_y']), fnum(r['p_ref_z'])]
-    thr = [r for r in cyc if fnum(r['lambda']) > 0]
     out = ['goal %s; %d cycles from t0 + %.1f s to t0 + %.1f s' % (goal, len(cyc), fnum(cyc[0]['t']) - t0, fnum(cyc[-1]['t']) - t0)]
-    if thr:
-        out.append('threat phase (lambda > 0): t0 + %.1f .. %.1f s, reference height %.2f .. %.2f m' % (
-            fnum(thr[0]['t']) - t0, fnum(thr[-1]['t']) - t0, min(p(r)[2] for r in thr), max(p(r)[2] for r in thr)))
+    strong = [r for r in cyc if fnum(r['lambda']) >= 0.5]
+    out.append('cycles with lambda > 0: %d of %d; with lambda >= 0.5: %d%s' % (
+        sum(fnum(r['lambda']) > 0 for r in cyc), len(cyc), len(strong),
+        (', between t0 + %.1f and %.1f s, reference height %.2f .. %.2f m in those cycles' % (
+            fnum(strong[0]['t']) - t0, fnum(strong[-1]['t']) - t0, min(p(r)[2] for r in strong), max(p(r)[2] for r in strong)))
+        if strong else ''))
     br = [i for i, r in enumerate(cyc) if r['stall_break_triggered'] == '1']
     if br:
         zo = [sum(int(fnum(ext.get(c['t'], {}).get('zero_is_opt', 0)) or 0) for c in cyc[max(0, i - 12):i]) for i in br]
