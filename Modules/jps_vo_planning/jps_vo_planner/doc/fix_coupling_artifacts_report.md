@@ -15,6 +15,8 @@
 Commits on `fix_coupling_artifacts`:
 
 ```
+9bac0e0 Pipeline update (report.py)
+934f11d Report (iteration 2): pipeline state at a protocol gate
 7b6b9d7 Pipeline update (report.py)
 6608469 Iteration 2: apply R1e low-speed angle penalty (iteration 2), R4-new leaky evidence + safety override (iteration 2); regenerate tests and presets
 d813b5b Stop report: pipeline ended at a protocol gate (supplementary analysis, section 4.5)
@@ -145,7 +147,7 @@ Pre-registered V1 gates: no collision and every goal reached; minimum dynamic cl
 ### Repeatability: identical configuration (`diag_only`, frozen behaviour) and seed in two iterations [sim]
 
 | Variant | Seed | min dyn. clearance it. 1 [m] | min dyn. clearance it. 2 [m] |
-|---|---|---||---|---|---|
+|---|---|---|---|
 | head_on | 101 | 0.936 | 0.656 |
 | head_on | 102 | 0.698 | 0.799 |
 | head_on | 103 | 0.644 | 0.428 |
