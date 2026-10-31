@@ -123,9 +123,21 @@ def write(R, st, tag, branch):
     w('')
     w('```\n%s\n```' % commits)
     w('')
+    stops = sorted(x for x in os.listdir(PIPE_DIR) if x.startswith('GATE_FAILURE_'))
+    w('Gate stops during the pipeline run (each fixed and the pipeline resumed; full reports in `%s`):' % PIPE_DIR)
+    w('')
+    for x in stops:
+        txt = open(os.path.join(PIPE_DIR, x)).read()
+        when = [l for l in txt.split('\n') if l.startswith('- time:')]
+        gate = [l for l in txt.split('\n') if l.startswith('- gate:')]
+        det = txt.split('```')[1].strip().split('\n')[0][:300] if '```' in txt else ''
+        w('- `%s` %s %s: %s' % (x, when[0][2:] if when else '', gate[0][2:] if gate else '', det))
+    if not stops:
+        w('- none')
+    w('')
     w('## 2 Build and offline tests')
     w('')
-    for t in R['existing_tests']:
+    for t in s2.get('existing_tests', []):
         r = s2.get(t, {})
         w('- Existing `%s`: exit %s, %s PASS, %s FAIL.' % (t, r.get('exit'), r.get('pass'), r.get('fail')))
     g = s2.get('golden', {})

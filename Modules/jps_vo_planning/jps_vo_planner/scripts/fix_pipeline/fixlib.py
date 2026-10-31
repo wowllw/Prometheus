@@ -113,7 +113,7 @@ def load_json(name, default=None):
 
 def fail_report(exc, stage):
     """Gate failure: write the diagnostic report and stop the pipeline."""
-    path = os.path.join(PIPE_DIR, 'GATE_FAILURE_%s.md' % stage)
+    path = os.path.join(PIPE_DIR, 'GATE_FAILURE_%s_%s.md' % (stage, datetime.datetime.now().strftime('%Y%m%d_%H%M%S')))
     with open(path, 'w') as f:
         f.write('# Pipeline stopped at %s\n\n' % stage)
         f.write('- time: %s\n- gate: %s\n\n## Detail\n\n```\n%s\n```\n' % (now(), getattr(exc, 'gate', type(exc).__name__),

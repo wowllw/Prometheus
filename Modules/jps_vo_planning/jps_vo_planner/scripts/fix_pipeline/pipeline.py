@@ -236,21 +236,23 @@ def stage2(R):
     open(os.path.join(PIPE_DIR, 'build.log'), 'w').write(b.stdout)
     if b.returncode != 0:
         raise GateFailure('Gate-2 build', 'build failed (exit %d), tail:\n%s' % (b.returncode, b.stdout[-3000:]))
-    # existing offline tests
-    for t in R['existing_tests']:
-        r = sh([os.path.join(R['bin_dir'], t)], check=False, timeout=1800)
-        open(os.path.join(PIPE_DIR, '%s.out' % t), 'w').write(r.stdout)
-        out[t] = {'exit': r.returncode, 'pass': r.stdout.count('[PASS]'), 'fail': r.stdout.count('[FAIL]')}
-        log('existing test %s: exit %d, %d PASS, %d FAIL' % (t, r.returncode, out[t]['pass'], out[t]['fail']))
-        if r.returncode != 0:
-            raise GateFailure('Gate-2 existing tests', '%s failed:\n%s' % (t, r.stdout[-3000:]))
-    # frozen reference: the tag's sources, compiled with the package's own compiler flags
+    # the tag's package tree: reference sources and the list of the existing offline tests
     frozen = os.path.join(PIPE_DIR, 'frozen_tree')
     shutil.rmtree(frozen, ignore_errors=True)
     os.makedirs(frozen)
     pkg_rel = os.path.relpath(R['pkg_root'], R['repo'])
     sh('git -C %s archive %s %s | tar -x -C %s' % (R['repo'], TAG, pkg_rel, frozen))
     fpkg = os.path.join(frozen, pkg_rel)
+    fm = re.search(r'foreach\(\s*t\s+([^)]*)\)', open(os.path.join(fpkg, os.path.basename(R['cmake']))).read())
+    existing = fm.group(1).split()
+    out['existing_tests'] = existing
+    for t in existing:
+        r = sh([os.path.join(R['bin_dir'], t)], check=False, timeout=1800)
+        open(os.path.join(PIPE_DIR, '%s.out' % t), 'w').write(r.stdout)
+        out[t] = {'exit': r.returncode, 'pass': r.stdout.count('[PASS]'), 'fail': r.stdout.count('[FAIL]')}
+        log('existing test %s: exit %d, %d PASS, %d FAIL' % (t, r.returncode, out[t]['pass'], out[t]['fail']))
+        if r.returncode != 0:
+            raise GateFailure('Gate-2 existing tests', '%s failed:\n%s' % (t, r.stdout[-3000:]))
     cxx, cflags, eig = flags_make(R['flags_make'])
     tf = os.path.join(os.path.dirname(os.path.dirname(R['flags_make'])), 'test_fixes.dir', 'flags.make')
     if flags_make(tf)[1] != cflags:
