@@ -329,6 +329,7 @@ def run_batch(R, out, tag, preset, seeds, variants, groups):
 
 def evaluate_arm(R, out, tag, preset, cells):
     """post-processing of one arm + extras; checks completeness and that the preset was really loaded."""
+    A.load_pp(R)
     flags = preset_flags(R, preset)
     rows = A.post_process_arm(R, out, tag)
     valid = {(r['variant'], r['group'], str(r['seed'])): r for r in rows if str(r['valid']) == '1'}

@@ -31,7 +31,14 @@ def p4(x):
 
 
 def med(vals):
-    v = [float(x) for x in vals if x not in ('', None) and float(x) == float(x)]
+    v = []
+    for x in vals:
+        try:
+            x = float(x)
+        except (TypeError, ValueError):
+            continue
+        if x == x:
+            v.append(x)
     return stt.median(v) if v else float('nan')
 
 
