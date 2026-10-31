@@ -15,6 +15,8 @@
 Commits on `fix_coupling_artifacts`:
 
 ```
+0a96a17 Pipeline update (report.py)
+dd4fc3a Stop report: pipeline ended at a protocol gate (supplementary analysis, section 4.5)
 62243d0 Pipeline update (analysis.py)
 3f1f042 Stop report: pipeline ended at a protocol gate (supplementary analysis, section 4.5)
 70ee6b8 Pipeline update (analysis.py, pipeline.py, report.py)
@@ -142,7 +144,7 @@ Not executed: the pipeline stopped before V3 (gate stop above).
 
 ### §4.2.4 (addition to the Chapter-4 discussion; frozen numbers only)
 
-In the frozen baseline (`{tag}`), g6 and the one-way series g3 both succeeded in all 120 runs, but g6 produced worse
+In the frozen baseline (`thesis-frozen-v1`), g6 and the one-way series g3 both succeeded in all 120 runs, but g6 produced worse
 paths (§4.2.2): M2 was significantly longer in all six variants (paired median differences +0.241 m to +1.711 m), M3
 significantly larger in S3_climb_ne, head_on, crossing_90 and M1_three_way, and M6 significantly higher in
 S3_climb_ne, crossing_90 and M1_three_way. The degradation also appears in the three static variants, which contain no
@@ -176,9 +178,10 @@ baseline of Chapter 4 is unaffected.
   with these defects.
 - The repair evaluation stopped at the V1 safety gate, so whether the repair mitigates the degradation is not
   established.
-- The run that stopped the evaluation shows the reference held at v = 0 near the floor layer after a dynamic
-  avoidance manoeuvre, advancing only through the stall breaker; whether a repair item contributes to this cannot be
-  identified from a single run (the same configuration's repeated attempt reached the goal).
+- In the run that stopped the evaluation, the reference descended during a dynamic avoidance manoeuvre and was then
+  held at v = 0 below the goal height, advancing only through the stall breaker until the timeout. Why every moving
+  candidate was rejected there, and whether a repair item contributes, cannot be identified from a single run (the
+  same configuration's repeated attempt reached the goal).
 
 ### Defence Q&A
 
