@@ -304,7 +304,7 @@ def write(R, st, tag, branch):
     else:
         gate = last_gate() or {}
         stage = 'V1' if not v1.get('done') else ('V2' if not v2.get('passed') else 'V3')
-        w(THESIS.split('### §4.5')[0] + STOPPED.format(tag=tag, stage=stage, adjust=adjust,
+        w(THESIS.split('### §4.5')[0].format(tag=tag) + STOPPED.format(tag=tag, stage=stage, adjust=adjust,
                                                        gate='%s (%s)' % (gate.get('gate', ''), gate.get('detail', ''))))
     text = '\n'.join(lines) + '\n'
     doc = os.path.join(os.path.dirname(R['chapter4_doc']), 'fix_coupling_artifacts_report.md')
@@ -337,9 +337,10 @@ baseline of Chapter 4 is unaffected.
   with these defects.
 - The repair evaluation stopped at the {stage} safety gate, so whether the repair mitigates the degradation is not
   established.
-- The run that stopped the evaluation shows the reference held at v = 0 near the floor layer after a dynamic
-  avoidance manoeuvre, advancing only through the stall breaker; whether a repair item contributes to this cannot be
-  identified from a single run (the same configuration's repeated attempt reached the goal).
+- In the run that stopped the evaluation, the reference descended during a dynamic avoidance manoeuvre and was then
+  held at v = 0 below the goal height, advancing only through the stall breaker until the timeout. Why every moving
+  candidate was rejected there, and whether a repair item contributes, cannot be identified from a single run (the
+  same configuration's repeated attempt reached the goal).
 
 ### Defence Q&A
 
