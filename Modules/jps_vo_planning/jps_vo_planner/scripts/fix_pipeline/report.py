@@ -162,6 +162,47 @@ def v1_table(w, root):
                 sum(int(float(x.get('r4_overrides') or 0)) for x in s)))
 
 
+def cross_iteration(w):
+    """Same configuration, same seed, different iterations (simulator repeatability), and the M1_three_way narrow-gap
+    passage for every V1 preset of every iteration."""
+    import glob
+    dirs = sorted(glob.glob(os.path.join(STATE_ROOT, 'v1', '*', 'v1_summary.csv')) +
+                  glob.glob(os.path.join(STATE_ROOT, 'iter*', 'v1', '*', 'v1_summary.csv')))
+    runs = {}
+    for p in dirs:
+        it = re.search(r'/iter(\d+)/', p)
+        it = int(it.group(1)) if it else 1
+        preset = os.path.basename(os.path.dirname(p))
+        for r in csv.DictReader(open(p)):
+            logs = sorted(glob.glob(os.path.join(os.path.dirname(p), r['variant'], r['group'], 'seed%s_a*' % r['seed'])))
+            runs[(it, preset, r['variant'], r['seed'])] = dict(r, log_dir=logs[0] if logs else '')
+    its = sorted({k[0] for k in runs})
+    if len(its) < 2:
+        return
+    w('### Repeatability: identical configuration (`diag_only`, frozen behaviour) and seed in two iterations [sim]')
+    w('')
+    w('| Variant | Seed | %s |' % ' | '.join('min dyn. clearance it. %d [m]' % i for i in its))
+    w('|---|---|%s' % '---|' * len(its))
+    for v in ('head_on', 'M1_three_way'):
+        for s in ('101', '102', '103'):
+            vals = [runs.get((i, 'diag_only', v, s), {}).get('min_dyn', '') for i in its]
+            w('| %s | %s | %s |' % (v, s, ' | '.join(f(x) for x in vals)))
+    w('')
+    w('### M1_three_way narrow gap (y 0.7–3.2 m) in every V1 run [sim]')
+    w('')
+    w('| Iteration | Preset | Seed | traversal [s] | median speed [m/s] | low-speed share |')
+    w('|---|---|---|---|---|---|')
+    for k in sorted(k for k in runs if k[2] == 'M1_three_way'):
+        r = runs[k]
+        if r.get('gap_time', '') == '':  # iteration-1 summaries predate the gap columns: recompute from the logs
+            x = A.run_extras(r['log_dir']) if r.get('log_dir') else {}
+            r = dict(r, gap_time=x.get('gap_time', ''), gap_median_speed=x.get('gap_median_speed', ''),
+                     gap_low_share=x.get('gap_low_share', ''))
+        w('| %d | %s | %s | %s | %s | %s |' % (k[0], k[1], k[3], f(r['gap_time'], 1), f(r['gap_median_speed'], 3),
+                                             f(r['gap_low_share'], 2)))
+    w('')
+
+
 def write(R, st, tag, branch, root):
     repo = R['repo']
     lines = []
@@ -273,6 +314,7 @@ def write(R, st, tag, branch, root):
     if v1.get('done'):
         w('- `all_on` after V1: %s' % ', '.join(k for k, x in v1.get('all_on', {}).items() if x))
     w('')
+    cross_iteration(w)
     w('## 6 V2 pre-screening ablation (seeds 1–3; g3, g5, g6 × all_off / all_on × 6 variants) [sim, n = 3, descriptive]')
     w('')
     if v2.get('stats'):
@@ -428,6 +470,10 @@ COMMON_TAIL = '''
 - The frozen dynamic constraint (time-to-collision > τ₂ = 12 s) also applies to a stationary obstacle; near a goal that
   lies on such an obstacle's safety sphere it admits only approach speeds ≤ (d − R)/τ₂ (a creeping approach). This is a
   property of the frozen model, not of the repair, and it is not changed here.
+- Simulator repeatability limits the screening: the same configuration (frozen behaviour) on the same seed gave
+  minimum dynamic clearances differing by up to 0.28 m between two runs, so a per-run 0.05 m clearance gate cannot
+  separate configuration effects from simulator nondeterminism; the M1_three_way narrow-gap low-speed passage also
+  occurred with the frozen behaviour in two of three seeds in one iteration and in none in the other.
 - The repaired version is a post-campaign patch; the conclusions of Chapter 4 rest on the frozen version.
 
 ### Defence Q&A
@@ -442,8 +488,9 @@ COMMON_TAIL = '''
 - *Why not modify the baseline directly?* Changing the model after the campaign and re-reporting would turn the
   evaluation into tuning on the test results; the tag keeps Chapter 4 reproducible and the flags keep the repair
   auditable and reversible.
-- *Did a repair item fail?* In iteration 1, V1 stopped at its safety gate (a mission failure). Runs with the
-  speed-proportional cone slack (R1b) showed long low-speed phases in a narrow gap that runs without it did not show
-  (an association from three seeds per cell, not a proven cause); R1b was replaced by R1e in iteration 2. Every
-  iteration and gate stop is listed in this report.
+- *Did a repair item fail?* Iteration 1 stopped at the V1 safety gate (a mission failure). Its runs with the
+  speed-proportional cone slack (R1b) showed long low-speed phases in a narrow gap, and R1b was replaced by R1e in
+  iteration 2. That association did not replicate: in iteration 2 the frozen behaviour itself showed the same
+  low-speed passage in two of three seeds, and R1e showed it in two of three. Iteration 2 stopped at the V1
+  dynamic-clearance gate. Every iteration and gate stop is listed in this report.
 '''
