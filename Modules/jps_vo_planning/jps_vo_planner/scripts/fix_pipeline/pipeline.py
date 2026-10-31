@@ -131,6 +131,23 @@ def commit(R, paths, msg):
     return h
 
 
+def sync_copy(R, commit_now=True):
+    """Keep the committed copy of the pipeline (next to the analysis script) identical to the code that runs."""
+    dst = os.path.join(os.path.dirname(R['post_process']), D.PIPELINE_DIRNAME)
+    if os.path.realpath(HERE) == os.path.realpath(dst):
+        return
+    files = []
+    for f in glob.glob(os.path.join(HERE, '*.py')) + glob.glob(os.path.join(HERE, 'templates', '*')) + \
+            glob.glob(os.path.join(HERE, 'base_steps', '*.py')):
+        p = os.path.join(dst, os.path.relpath(f, HERE))
+        text = open(f).read()
+        if not os.path.isfile(p) or open(p).read() != text:
+            L.write_file(p, text)
+            files.append(p)
+    if files and commit_now:
+        commit(R, files, 'Pipeline update (%s)' % ', '.join(sorted(os.path.relpath(p, dst) for p in files)))
+
+
 # ---------------------------------------------------------------- stage 1: implementation
 def stage1(R):
     ensure_branch(R)
@@ -150,11 +167,7 @@ def stage1(R):
             TN.write_preset(R, name, flags, note)
         TN.start_script(R)
         TN.batch_script(R)
-    # the pipeline itself, for reproducibility (next to the analysis script)
-    dst = os.path.join(os.path.dirname(R['post_process']), 'fix_pipeline')
-    for f in glob.glob(os.path.join(HERE, '*.py')) + glob.glob(os.path.join(HERE, 'templates', '*')) + \
-            glob.glob(os.path.join(HERE, 'base_steps', '*.py')):
-        L.write_file(os.path.join(dst, os.path.relpath(f, HERE)), open(f).read())
+    sync_copy(R, commit_now=False)
     h = commit(R, L.TOUCHED, 'Add FX1-FX6 coupling repairs behind default-false flags, presets, tests, pipeline')
     changed = git(R, 'diff', '--name-only', TAG, 'HEAD').split('\n')
     log('stage1: %d files differ from %s on %s (commit %s)' % (len([c for c in changed if c]), TAG, BRANCH, h))
@@ -584,6 +597,8 @@ def main():
         R = stage0(repo)
         if a.cmd == 'integrity':
             return
+        if 'stage1' in state().get('done_stages', []):
+            sync_copy(R)
         done = state().get('done_stages', [])
         for stg in STAGES[1:STAGES.index(a.until) + 1]:
             cur = stg

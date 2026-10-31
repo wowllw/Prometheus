@@ -7,6 +7,8 @@ import re
 from fixlib import GateFailure, sh, log, save_json, PIPE_DIR
 
 SRC_EXT = ('.h', '.hpp', '.cpp', '.cc')
+PIPELINE_DIRNAME = 'fix_pipeline'  # where the pipeline keeps its own committed copy; never part of the project scan
+SELF_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def _read(p):
@@ -42,6 +44,8 @@ def _shell_vars(text, env):
 def discover(repo):
     R = {'repo': repo}
     tracked = [os.path.join(repo, f) for f in sh(['git', 'ls-files'], cwd=repo).stdout.split('\n') if f]
+    tracked = [f for f in tracked if not f.startswith(SELF_DIR + os.sep) and
+               os.sep + PIPELINE_DIRNAME + os.sep not in f]
     src = [f for f in tracked if f.endswith(SRC_EXT)]
 
     # ---- core module: the header that defines the ablation switch struct, and its package ----
