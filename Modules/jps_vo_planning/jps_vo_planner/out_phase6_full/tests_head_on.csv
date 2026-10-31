@@ -1,0 +1,46 @@
+comparison,metric,variant,ci_high,ci_low,effect,effect_value,g6_only,gx_only,n_pairs,note,p_holm,p_raw,significant_0.05,test
+g6 vs g1,M1_mean_ms,head_on,27.139,25.020,median paired diff g6-gX,25.510,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M1_mean_ms,head_on,1.343,-0.615,median paired diff g6-gX,0.275,,,20,,0.6742,0.6742,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M1_mean_ms,head_on,27.713,25.443,median paired diff g6-gX,27.192,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M1_mean_ms,head_on,-23.903,-56.149,median paired diff g6-gX,-39.469,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g5,M1_mean_ms,head_on,14.926,12.951,median paired diff g6-gX,13.332,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M1_p95_ms,head_on,30.006,20.924,median paired diff g6-gX,26.428,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M1_p95_ms,head_on,-92.560,-136.521,median paired diff g6-gX,-107.836,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M1_p95_ms,head_on,32.455,22.515,median paired diff g6-gX,26.425,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M1_p95_ms,head_on,-5.193,-106.855,median paired diff g6-gX,-59.062,,,20,,0.0017,0.0017,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g5,M1_p95_ms,head_on,-17.874,-35.363,median paired diff g6-gX,-28.714,,,20,,0.0002,0.0001,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M2_path_length_m,head_on,1.927,1.121,median paired diff g6-gX,1.556,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M2_path_length_m,head_on,0.947,0.864,median paired diff g6-gX,0.904,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M2_path_length_m,head_on,1.235,0.743,median paired diff g6-gX,1.034,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M2_path_length_m,head_on,0.095,-0.952,median paired diff g6-gX,-0.300,,,20,,0.3955,0.3955,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g5,M2_path_length_m,head_on,0.099,-0.242,median paired diff g6-gX,-0.146,,,20,,0.1517,0.0759,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M3_max_turn_deg_1s,head_on,38.950,2.432,median paired diff g6-gX,16.627,,,20,,0.0362,0.0121,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M3_max_turn_deg_1s,head_on,74.254,26.875,median paired diff g6-gX,35.489,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M3_max_turn_deg_1s,head_on,36.984,0.740,median paired diff g6-gX,7.118,,,20,,0.0362,0.0172,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M3_max_turn_deg_1s,head_on,71.961,27.451,median paired diff g6-gX,34.759,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g5,M3_max_turn_deg_1s,head_on,11.863,-27.605,median paired diff g6-gX,-16.019,,,20,,0.2774,0.2774,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M5_mean_m,head_on,0.269,0.230,median paired diff g6-gX,0.245,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M5_mean_m,head_on,0.119,0.076,median paired diff g6-gX,0.098,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M5_mean_m,head_on,0.192,0.043,median paired diff g6-gX,0.174,,,20,,0.0012,0.0006,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M5_mean_m,head_on,-0.961,-1.147,median paired diff g6-gX,-1.076,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g5,M5_mean_m,head_on,0.061,-0.000,median paired diff g6-gX,0.040,,,20,,0.0121,0.0121,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M5_max_m,head_on,0.877,0.691,median paired diff g6-gX,0.759,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M5_max_m,head_on,0.596,0.487,median paired diff g6-gX,0.530,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M5_max_m,head_on,0.593,-0.041,median paired diff g6-gX,0.520,,,20,,0.0054,0.0027,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M5_max_m,head_on,-0.853,-1.797,median paired diff g6-gX,-1.266,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g5,M5_max_m,head_on,0.254,0.085,median paired diff g6-gX,0.161,,,20,,0.0054,0.0049,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M6_flip_backs,head_on,2.000,0.000,median paired diff g6-gX,1.000,,,20,,0.0282,0.0094,1,"Wilcoxon signed-rank (Pratt, normal)"
+g6 vs g2,M6_flip_backs,head_on,,,,,,,,N/A (M6 undefined for g2),,,,
+g6 vs g3,M6_flip_backs,head_on,2.000,0.000,median paired diff g6-gX,0.500,,,20,,0.1140,0.0570,0,"Wilcoxon signed-rank (Pratt, normal)"
+g6 vs g4,M6_flip_backs,head_on,0.000,-1.000,median paired diff g6-gX,0.000,,,20,,0.6807,0.6807,0,"Wilcoxon signed-rank (Pratt, normal)"
+g6 vs g5,M6_flip_backs,head_on,-2.500,-7.000,median paired diff g6-gX,-6.000,,,20,,0.0028,0.0007,1,"Wilcoxon signed-rank (Pratt, normal)"
+g6 vs g1,M4_success,head_on,1.000,1.000,rate diff g6-gX,1.000,20,0,20,,0.0000,0.0000,1,exact McNemar
+g6 vs g2,M4_success,head_on,0.000,0.000,rate diff g6-gX,0.000,0,0,20,,1.0000,1.0000,0,exact McNemar
+g6 vs g3,M4_success,head_on,0.000,0.000,rate diff g6-gX,0.000,0,0,20,,1.0000,1.0000,0,exact McNemar
+g6 vs g4,M4_success,head_on,1.000,1.000,rate diff g6-gX,1.000,20,0,20,,0.0000,0.0000,1,exact McNemar
+g6 vs g5,M4_success,head_on,0.000,0.000,rate diff g6-gX,0.000,0,0,20,,1.0000,1.0000,0,exact McNemar
+g6 vs g1,success_wo_trigger,head_on,1.000,1.000,rate diff g6-gX,1.000,20,0,20,,0.0000,0.0000,1,exact McNemar
+g6 vs g2,success_wo_trigger,head_on,0.000,0.000,rate diff g6-gX,0.000,0,0,20,,1.0000,1.0000,0,exact McNemar
+g6 vs g3,success_wo_trigger,head_on,0.550,0.150,rate diff g6-gX,0.350,7,0,20,,0.0469,0.0156,1,exact McNemar
+g6 vs g4,success_wo_trigger,head_on,1.000,1.000,rate diff g6-gX,1.000,20,0,20,,0.0000,0.0000,1,exact McNemar
+g6 vs g5,success_wo_trigger,head_on,0.150,0.000,rate diff g6-gX,0.050,1,0,20,,1.0000,1.0000,0,exact McNemar

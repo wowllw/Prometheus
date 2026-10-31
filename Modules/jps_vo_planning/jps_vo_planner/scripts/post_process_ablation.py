@@ -197,8 +197,12 @@ def evaluate_run(run_dir, variant=None, group=None, seed=None, attempt=1, tag=''
         invalid('I-8', 'cycles.csv has no complete row')
         return finish(row, code, reasons)
     ts = [fnum(r['t']) for r in cyc]
-    if ts[0] - t0 > 5.0:
-        invalid('I-8', 'first cycle %.2f s after t0 (> 5 s incl. pre-rotation)' % (ts[0] - t0))
+    # completeness = every cycle the node executed is in the file. A late first row is NOT a log gap: the node
+    # starts local cycles only after pre-rotation and its first global search (up to several s, e.g. g4).
+    if 'cycles' in checks and len(cyc) != int(checks['cycles']):
+        invalid('I-8', 'cycles.csv has %d complete rows, node counted %s cycles' % (len(cyc), checks['cycles']))
+    row['notes'] = (row['notes'] + '; ' if row['notes'] else '') + 'first cycle %.1f s after t0' % (ts[0] - t0) \
+        if ts[0] - t0 > 5.0 else row['notes']
     gaps = [b - a for a, b in zip(ts, ts[1:])]
     if gaps and max(gaps) > 1.0:
         invalid('I-8', 'cycle gap %.2f s' % max(gaps))
@@ -530,9 +534,24 @@ def main():
                 row.update(variant=r['variant'], group=r['group'], seed=r['seed'], attempt=r['attempt'], tag=tag,
                            log_dir=r['log_dir'], hover_z_before_t0=r['hover_z'], notes=r['notes'])
             else:
+                # the run reached evaluation: its index code (if any) came from --check-run, i.e. from this file's
+                # checks, so it is re-derived here instead of carried over (checks may have been corrected)
                 row, _, _ = evaluate_run(r['log_dir'], r['variant'], r['group'], r['seed'], r['attempt'], tag,
-                                         r['invalid_code'], r['notes'])
+                                         '', r['notes'])
             rows.append(row)
+        # only the FIRST valid attempt of a cell counts (a valid run is never rerun). A later attempt can exist
+        # only if an earlier one was classified invalid by a check that was corrected afterwards; it is kept in
+        # ablation_runs.csv but marked and excluded from all statistics.
+        first_valid = {}
+        for row in sorted(rows, key=lambda r: int(r['attempt'])):
+            key = (row['variant'], row['group'], str(row['seed']))
+            if row['valid'] == 1:
+                if key in first_valid:
+                    row['valid'] = 0
+                    row['invalid_code'] = 'SUPERSEDED'
+                    row['invalid_reason'] = 'rerun after an earlier valid attempt (attempt %s)' % first_valid[key]
+                else:
+                    first_valid[key] = row['attempt']
         out = a.out or os.path.join(os.path.dirname(os.path.abspath(a.index)), 'results')
     elif a.dirs:
         tag = a.tag or 'adhoc'

@@ -34,15 +34,15 @@ Conventions:
 | Item | Value |
 |---|---|
 | Campaign start / end (date, time) | |
-| Git commit (Prometheus repo) | |
-| Core source timestamps verified (E-4) | yes / no |
-| Binary build time (`devel/lib/jps_vo_planner/jps_vo_planner_node`) | |
-| `check_scenarios.py scenario_ablation_all.yaml --seeds 1-20` exit code | |
-| 4 offline test suites | ALL CHECKS PASSED: yes / no |
+| Git commit (Prometheus repo) | `130163686c457945985a567203c2c889487f054a` (`main`, "init prometheus, exclude build and large zip", 2026-10-26 19:23; working tree clean at campaign start) |
+| Core source timestamps verified (E-4) | yes: `coupling.*` 00:36, `jps3d.*` 00:49, `local_planner.h` 00:35, `local_planner.cpp` / `planner_core.*` 01:14 (2026-10-26) |
+| Binary build time (`devel/lib/jps_vo_planner/jps_vo_planner_node`) | 2026-10-26 05:13:03 (`catkin_make` at campaign start: up to date) |
+| `check_scenarios.py scenario_ablation_all.yaml --seeds 1-20` exit code | 0 (6/6 variants OK) |
+| 4 offline test suites | ALL CHECKS PASSED: yes (4 × 0 failures, at campaign start) |
 | Smoke runs g1–g5 (E-5): result per group | 2026-10-26 07:26–07:39, S1_east seed 1, `~/.ros/ablation_smoke/` (not in the formal data): g1 goal, g2 goal, g3 goal, **g4 timeout (F-2, valid failure)**, g5 goal; no crash, all logs complete. Details: `doc/smoke_test_report.md` |
 | Post-processing script name + commit | `scripts/post_process_ablation.py` (+ `scripts/verify_run.py`), not yet committed: record the commit here before the campaign |
 | Machine (CPU, RAM), OS, ROS, Gazebo, PX4 versions | |
-| Mean Gazebo real-time factor over the campaign | |
+| Mean Gazebo real-time factor over the campaign | **not collected** in this campaign: known limitation; invalid-run rule I-1 could not be applied |
 | RECORD setting | 0 for the batch (Q-B); 1 only for manually selected illustration runs, listed in T9 |
 
 ### T0.1 Confirmed experiment decisions (Q-A … Q-E, confirmed by the author 2026-10-26)

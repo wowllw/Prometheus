@@ -1,0 +1,7 @@
+group,mean_override_share_pct,runs_with_trigger,stall_breaks_sum,stall_hold_cycles_sum,valid_runs
+g1,1.69,25,142,710,120
+g2,0.17,2,29,143,120
+g3,0.20,13,14,70,120
+g4,0.96,120,139,695,120
+g5,2.64,38,218,1090,120
+g6,2.41,37,200,1000,120

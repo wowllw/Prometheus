@@ -1,0 +1,5 @@
+/bin/bash: 行 2: ./patched/bin/test_fixes: 没有那个文件或目录
+
+real	0m0.001s
+user	0m0.001s
+sys	0m0.000s

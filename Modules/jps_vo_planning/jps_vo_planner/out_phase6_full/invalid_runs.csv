@@ -1,0 +1,9 @@
+variant,group,seed,attempt,invalid_code,invalid_reason,log_dir
+S1_east,g2,1,1,I-8,driver: I-8 log dir exists already,/home/amov/.ros/ablation/S1_east/g2/seed1_a1
+S1_east,g2,1,2,I-8,driver: I-8 log dir exists already,/home/amov/.ros/ablation/S1_east/g2/seed1_a2
+S1_east,g3,1,1,I-8,driver: I-8 log dir exists already,/home/amov/.ros/ablation/S1_east/g3/seed1_a1
+S1_east,g3,1,2,I-8,driver: I-8 log dir exists already,/home/amov/.ros/ablation/S1_east/g3/seed1_a2
+S1_east,g4,1,1,I-8,driver: I-8 log dir exists already,/home/amov/.ros/ablation/S1_east/g4/seed1_a1
+S3_climb_ne,g1,5,1,I-7,driver: I-7 odom_valid not True,/home/amov/.ros/ablation/S3_climb_ne/g1/seed5_a1
+crossing_90,g3,7,1,I-3,driver: I-3 hover z -0.551..0.315 |v|mean 0.239 max 0.997 armed/offboard/command 000,/home/amov/.ros/ablation/crossing_90/g3/seed7_a1
+head_on,g4,15,2,SUPERSEDED,rerun after an earlier valid attempt (attempt 1),/home/amov/.ros/ablation/head_on/g4/seed15_a2

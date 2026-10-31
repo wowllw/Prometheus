@@ -1,0 +1,46 @@
+comparison,metric,variant,ci_high,ci_low,effect,effect_value,g6_only,gx_only,n_pairs,note,p_holm,p_raw,significant_0.05,test
+g6 vs g1,M1_mean_ms,S3_climb_ne,0.132,-0.048,median paired diff g6-gX,0.061,,,19,,0.1517,0.0799,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M1_mean_ms,S3_climb_ne,0.347,0.233,median paired diff g6-gX,0.302,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M1_mean_ms,S3_climb_ne,0.231,0.161,median paired diff g6-gX,0.200,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M1_mean_ms,S3_climb_ne,,,,,,,0,no pairs,,,,
+g6 vs g5,M1_mean_ms,S3_climb_ne,0.169,0.009,median paired diff g6-gX,0.108,,,20,,0.1517,0.0759,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M1_p95_ms,S3_climb_ne,0.841,-0.252,median paired diff g6-gX,-0.053,,,19,,0.5949,0.5949,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M1_p95_ms,S3_climb_ne,2.903,2.373,median paired diff g6-gX,2.603,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M1_p95_ms,S3_climb_ne,1.127,0.288,median paired diff g6-gX,0.631,,,20,,0.0006,0.0002,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M1_p95_ms,S3_climb_ne,,,,,,,0,no pairs,,,,
+g6 vs g5,M1_p95_ms,S3_climb_ne,0.665,-0.059,median paired diff g6-gX,0.362,,,20,,0.2280,0.1140,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M2_path_length_m,S3_climb_ne,0.683,-0.321,median paired diff g6-gX,0.351,,,19,,0.9799,0.4900,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M2_path_length_m,S3_climb_ne,2.274,1.179,median paired diff g6-gX,1.641,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M2_path_length_m,S3_climb_ne,2.199,1.281,median paired diff g6-gX,1.711,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M2_path_length_m,S3_climb_ne,,,,,,,0,no pairs,,,,
+g6 vs g5,M2_path_length_m,S3_climb_ne,0.584,-0.701,median paired diff g6-gX,0.083,,,20,,0.9799,0.8983,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M3_max_turn_deg_1s,S3_climb_ne,26.477,-16.060,median paired diff g6-gX,10.619,,,19,,0.6248,0.3124,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M3_max_turn_deg_1s,S3_climb_ne,111.895,77.163,median paired diff g6-gX,99.129,,,20,,0.0001,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M3_max_turn_deg_1s,S3_climb_ne,98.826,77.677,median paired diff g6-gX,80.004,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M3_max_turn_deg_1s,S3_climb_ne,,,,,,,0,no pairs,,,,
+g6 vs g5,M3_max_turn_deg_1s,S3_climb_ne,23.269,-23.944,median paired diff g6-gX,-5.217,,,20,,0.8983,0.8983,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M5_mean_m,S3_climb_ne,0.213,-0.160,median paired diff g6-gX,0.149,,,19,,1.0000,0.4413,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M5_mean_m,S3_climb_ne,1.037,0.771,median paired diff g6-gX,0.855,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M5_mean_m,S3_climb_ne,0.196,-0.120,median paired diff g6-gX,-0.010,,,20,,1.0000,0.6477,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M5_mean_m,S3_climb_ne,,,,,,,0,no pairs,,,,
+g6 vs g5,M5_mean_m,S3_climb_ne,0.058,-0.258,median paired diff g6-gX,-0.003,,,20,,1.0000,0.3488,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M5_max_m,S3_climb_ne,0.015,-0.038,median paired diff g6-gX,-0.006,,,19,,0.5547,0.4900,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g2,M5_max_m,S3_climb_ne,2.038,1.969,median paired diff g6-gX,2.006,,,20,,0.0000,0.0000,1,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g3,M5_max_m,S3_climb_ne,0.005,-0.048,median paired diff g6-gX,-0.020,,,20,,0.5547,0.2774,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g4,M5_max_m,S3_climb_ne,,,,,,,0,no pairs,,,,
+g6 vs g5,M5_max_m,S3_climb_ne,-0.003,-0.073,median paired diff g6-gX,-0.019,,,20,,0.0719,0.0240,0,"Wilcoxon signed-rank (Pratt, exact)"
+g6 vs g1,M6_flip_backs,S3_climb_ne,0.000,0.000,median paired diff g6-gX,0.000,,,19,,0.5808,0.3879,0,"Wilcoxon signed-rank (Pratt, normal)"
+g6 vs g2,M6_flip_backs,S3_climb_ne,,,,,,,,N/A (M6 undefined for g2),,,,
+g6 vs g3,M6_flip_backs,S3_climb_ne,0.500,0.000,median paired diff g6-gX,0.000,,,20,,0.0271,0.0090,1,"Wilcoxon signed-rank (Pratt, normal)"
+g6 vs g4,M6_flip_backs,S3_climb_ne,,,,,,,0,no pairs,,,,
+g6 vs g5,M6_flip_backs,S3_climb_ne,0.500,0.000,median paired diff g6-gX,0.000,,,20,,0.5808,0.2904,0,"Wilcoxon signed-rank (Pratt, normal)"
+g6 vs g1,goal_success,S3_climb_ne,0.000,0.000,rate diff g6-gX,0.000,0,0,19,,1.0000,1.0000,0,exact McNemar
+g6 vs g2,goal_success,S3_climb_ne,0.000,0.000,rate diff g6-gX,0.000,0,0,20,,1.0000,1.0000,0,exact McNemar
+g6 vs g3,goal_success,S3_climb_ne,0.000,0.000,rate diff g6-gX,0.000,0,0,20,,1.0000,1.0000,0,exact McNemar
+g6 vs g4,goal_success,S3_climb_ne,,,,,,,0,no pairs,,,,
+g6 vs g5,goal_success,S3_climb_ne,0.000,0.000,rate diff g6-gX,0.000,0,0,20,,1.0000,1.0000,0,exact McNemar
+g6 vs g1,success_wo_trigger,S3_climb_ne,0.105,-0.421,rate diff g6-gX,-0.158,2,5,19,,0.9062,0.4531,0,exact McNemar
+g6 vs g2,success_wo_trigger,S3_climb_ne,-0.350,-0.750,rate diff g6-gX,-0.550,0,11,20,,0.0039,0.0010,1,exact McNemar
+g6 vs g3,success_wo_trigger,S3_climb_ne,-0.350,-0.750,rate diff g6-gX,-0.550,0,11,20,,0.0039,0.0010,1,exact McNemar
+g6 vs g4,success_wo_trigger,S3_climb_ne,,,,,,,0,no pairs,,,,
+g6 vs g5,success_wo_trigger,S3_climb_ne,0.350,-0.150,rate diff g6-gX,0.100,5,3,20,,0.9062,0.7266,0,exact McNemar
