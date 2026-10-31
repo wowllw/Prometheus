@@ -1,6 +1,6 @@
-# fix_coupling_artifacts — pipeline report (supplementary analysis, thesis §4.5)
+# fix_coupling_artifacts — pipeline report (iteration 2; supplementary analysis, thesis §4.5)
 
-> Chapter 4 reports the frozen baseline `thesis-frozen-v1` and is unchanged. Everything here is a post-campaign engineering patch evaluated as supplementary analysis. g6 vs g3 is the joint C2 + C3 effect only. V0 log diagnostics are correlational clues, not evidence. Unit tests are not closed-loop evidence; only V1–V3 simulations are.
+> Chapter 4 reports the frozen baseline `thesis-frozen-v1` and is unchanged. Everything here is a post-campaign engineering patch evaluated as supplementary analysis. Evidence classes: **[code]** fact read from the source, **[log]** clue from run logs (association only), **[sim]** result of the ablation simulations — the only class accepted as evidence for or against mitigation. g6 vs g3 is the joint C2 + C3 effect only. Unit tests and the dry run are not closed-loop evidence.
 
 ## 1 Git baseline protection
 
@@ -9,12 +9,15 @@
 | Tag | `thesis-frozen-v1` (annotated, object `b755fb87d0f7`) → commit `130163686c45` |
 | Protected base branch | `main`, commit unchanged: `130163686c45` |
 | Development branch | `fix_coupling_artifacts` |
-| Read-only assets | Chapter-4 doc, frozen 720-cell dataset, frozen analysis outputs: hashes identical at every stage (Gate-I) |
+| Read-only assets | Chapter-4 doc, frozen 720-cell dataset, frozen analysis outputs: SHA-256 identical at every gate (Gate-I) |
 | Uncommitted user files left untouched | `Modules/jps_vo_planning/jps_vo_planner/doc/ablation_result_record_table.md`, `Modules/jps_vo_planning/jps_vo_planner/scripts/__pycache__/post_process_ablation.cpython-38.pyc`, `Modules/jps_vo_planning/jps_vo_planner/scripts/post_process_ablation.py` |
 
 Commits on `fix_coupling_artifacts`:
 
 ```
+7b6b9d7 Pipeline update (report.py)
+6608469 Iteration 2: apply R1e low-speed angle penalty (iteration 2), R4-new leaky evidence + safety override (iteration 2); regenerate tests and presets
+d813b5b Stop report: pipeline ended at a protocol gate (supplementary analysis, section 4.5)
 0a96a17 Pipeline update (report.py)
 dd4fc3a Stop report: pipeline ended at a protocol gate (supplementary analysis, section 4.5)
 62243d0 Pipeline update (analysis.py)
@@ -28,119 +31,178 @@ dd4fc3a Stop report: pipeline ended at a protocol gate (supplementary analysis, 
 160e7e8 Add FX1-FX6 coupling repairs behind default-false flags, presets, tests, pipeline
 ```
 
-Gate stops during the pipeline run, in order (full reports in `/home/amov/.ros/ablation_fix/pipeline`). A stop caused by a defect of the pipeline itself was fixed and the pipeline resumed; a stop by a protocol gate ends the run:
+## 2 Iterations
 
-- `GATE_FAILURE_stage0.md` time: 2026-10-31 00:49:38 gate: Gate-0 discovery: role check_scenarios: expected exactly one match, found 3: ['/home/amov/Prometheus/Modules/jps_vo_planning/jps_vo_planner/scripts/check_scenarios.py', '/home/amov/Prometheus/Modules/jps_vo_planning/jps_vo_planner/scripts/fix_pipeline/discover.py', '/home/amov/Prometheus/Modules/jps_vo_planning/jps_v
-- `GATE_FAILURE_stage2.md` time: 2026-10-31 01:02:57 gate: Gate-2 existing tests: test_fixes failed:
-- `GATE_FAILURE_v1_20261031_011803.md` time: 2026-10-31 01:18:03 gate: Gate-I output: refusing to write outside /home/amov/.ros/ablation_fix: /home/amov/.ros/ablation_fix/v1/diag_only
-- `GATE_FAILURE_v1_20261031_014322.md` time: 2026-10-31 01:43:22 gate: unexpected error: Traceback (most recent call last):
-- `GATE_FAILURE_v1_20261031_035301.md` time: 2026-10-31 03:53:01 gate: Gate-V1 safety: unsafe after the R4-m fallback at v1_r4
+- **Iteration 1** (closed 2026-10-31 05:13:58): V1 stopped at the safety gate (M1_three_way seed 102 timeout under v1_r4_r4m). Log clues: R1b runs crawl in the narrow gap (y 0.7-3.2) at ~0.06-0.10 m/s vs ~0.5 m/s without; the late arrival led to an untriggered obstacle parked at the goal and a creeping approach under the frozen tau2-VO. Change: FX1 uses R1e (frozen angle penalty above v_min, linear fade below) instead of R1b; V1/V2 rules of the new task (3 seeds, no auto-repair, V3 manual).
+  - V1 steps completed: diag_only, v1_r1, v1_r2, v1_r3; adjustments: step v1_r4: avoidance delayed by the dwell -> r4m_dwell_free_only enabled
+  - gate stop `GATE_FAILURE_stage0.md`: Gate-0 discovery — role check_scenarios: expected exactly one match, found 3: ['/home/amov/Prometheus/Modules/jps_vo_planning/jps_vo_planner/scripts/check_scenarios.py', '/home/amov/Prometheus/Modules/jps_vo_planning/jp
+  - gate stop `GATE_FAILURE_stage2.md`: Gate-2 existing tests — test_fixes failed:
+  - gate stop `GATE_FAILURE_v1_20261031_011803.md`: Gate-I output — refusing to write outside /home/amov/.ros/ablation_fix: /home/amov/.ros/ablation_fix/v1/diag_only
+  - gate stop `GATE_FAILURE_v1_20261031_014322.md`: unexpected error — Traceback (most recent call last):
+  - gate stop `GATE_FAILURE_v1_20261031_035301.md`: Gate-V1 safety — unsafe after the R4-m fallback at v1_r4
+- **Iteration 2** (this report).
 
-## 2 Build and offline tests
+## 3 Dry run (sandbox copy of the tag; repository untouched)
+
+- Edit layers applied on the frozen sources (every anchor matched exactly once): base FX1-FX6 (iteration 1); R3 positive part + R4-m (iteration 1); R1e low-speed angle penalty (iteration 2); R4-new leaky evidence + safety override (iteration 2); experiment drivers: fixes preset pass-through.
+- Full diff: 27 files, +1854 / −13 lines (sha256 `d5e74d2ad3f493e9`), kept in `/home/amov/.ros/ablation_fix/pipeline/dryrun_iter2/full.diff`.
+- Compilation with the package flags: no errors, no new warnings (core library, node translation units with their ROS flags, all test programs).
+- Frozen `gen_golden` vs sandbox `gen_golden` (all flags false): identical (2578995 bytes).
+- Existing tests in the sandbox: test_coupling 18 PASS, test_jps 10 PASS, test_occupancy_grid 10 PASS, test_vo 3 PASS.
+- Sandbox `test_fixes`: 62 PASS, 0 FAIL. Log writers of cycles.csv / paths.csv unchanged: openLogs, writeCycleRow, writePathEvents, writeChecks.
+
+**Phase A check** of `/home/amov/.ros/ablation_fix/pipeline/dryrun_iter2_console.log` and the sandbox test output: layers 5 of 5; problems: none.
+
+| Implementation checklist | Status |
+|---|---|
+| FX1 (R1a, R1c, R1d, R1e) | declared, default false |
+| FX2 (R2a, R2b) | declared, default false |
+| FX3 (R3 positive increments) | declared, default false |
+| FX4 (R4, R4-m, R4-new evidence, R4-s override) | declared, default false |
+| FX5 (R5) | declared, default false |
+| FX6 (S1) | declared, default false |
+| R1b retained for comparison | declared, default false |
+
+| Test | Result (sandbox) |
+|---|---|
+| T0 | 2 PASS / 0 FAIL |
+| T0b | 1 PASS / 0 FAIL |
+| T1 | 3 PASS / 0 FAIL |
+| T10 | 2 PASS / 0 FAIL |
+| T11 | 6 PASS / 0 FAIL |
+| T2 | 4 PASS / 0 FAIL |
+| T2e | 4 PASS / 0 FAIL |
+| T3 | 1 PASS / 0 FAIL |
+| T4 | 4 PASS / 0 FAIL |
+| T5 | 4 PASS / 0 FAIL |
+| T5b | 5 PASS / 0 FAIL |
+| T6 | 2 PASS / 0 FAIL |
+| T6b | 1 PASS / 0 FAIL |
+| T7 | 2 PASS / 0 FAIL |
+| T8 | 1 PASS / 0 FAIL |
+| T9 | 20 PASS / 0 FAIL |
+
+- Superseded dry run (edit sources changed afterwards; fingerprint `None`): 56 PASS / 0 FAIL.
+
+## 4 Stage 0–2 (deployment)
 
 - Existing `test_occupancy_grid`: exit 0, 10 PASS, 0 FAIL.
 - Existing `test_jps`: exit 0, 10 PASS, 0 FAIL.
 - Existing `test_vo`: exit 0, 3 PASS, 0 FAIL.
 - Existing `test_coupling`: exit 0, 18 PASS, 0 FAIL.
-- Frozen reference built from `thesis-frozen-v1` with the package flags `-O3 -Wall -g -std=c++14`: 2578995 bytes, sha256 `dfcd7292a6db5ccc`.
-- Branch `gen_golden` with every flag at its default (false): identical to the frozen reference.
-- Log-format identity (source level): the frozen lines of `openLogs`, `writeCycleRow`, `writePathEvents`, `writeChecks` are unchanged; additions are guarded by the fix flags and never write to `cycles.csv` / `paths.csv`.
-- `test_fixes`: 43 PASS, 0 FAIL. Gate-T0: [PASS] T0 all fixes off: dump identical to the frozen reference (2578995 bytes)
-  - `[INFO] T3 lambda = 0, R1a+R1b on: v* == frozen ray closed form in 276/276 cases with |v_prev| >= 0.4 and 324/324 with |v_prev| < 0.4`
+- Frozen reference built from `thesis-frozen-v1` with `-O3 -Wall -g -std=c++14`: 2578995 bytes; branch `gen_golden` (flags false): identical.
+- `test_fixes` (catkin build): 62 PASS, 0 FAIL. Gate-T0: [PASS] T0 all fixes off: dump identical to the frozen reference (2578995 bytes)
+  - `[INFO] T3 lambda = 0, R1a+R1b on: v* == frozen ray closed form in 303/303 cases with |v_prev| >= 0.4 and 297/297 with |v_prev| < 0.4`
   - `[INFO] T5 risk source at lateral 2.2 m: route side changes over 200 replans: R4 off 199, R4 on 66`
   - `[INFO] T5 risk source at lateral 5.5 m: route side changes over 200 replans: R4 off 0, R4 on 0`
   - `[INFO] T5b route side changes over 200 replans: R4 33, R4 + R4-m 33; R4-m judged switches: 1 under threat (1 accepted inside the dwell), 116 threat-free`
-  - `[INFO] T6 300 random obstacles: frozen-only fires 40, both 49, R3-only 1, neither 210`
-  - `[INFO] T6b 61 cases with a remaining-edge increase > eps_w (3 with simultaneous decreases); the signed sum of the first patch version stays <= eps_w in 0 of them`
-  - `[INFO] T8 S1: 453 non-fallback problems, risk budget active in 304`
-  - `[INFO] T10 R1d: 880 problems with a feasible moving candidate; v* = 0 chosen in 188 of them`
+  - `[INFO] T6 300 random obstacles: frozen-only fires 38, both 62, R3-only 2, neither 198`
+  - `[INFO] T6b 59 cases with a remaining-edge increase > eps_w (12 with simultaneous decreases); the signed sum of the first patch version stays <= eps_w in 0 of them`
+  - `[INFO] T11 route side changes over 200 replans with an alternating risk source: no R4 199, R4 (it. 1) 66, R4-new 199`
+  - `[INFO] T11 safety override: predicted clearance old route -0.73 m, new route 1.75 m`
+  - `[INFO] T8 S1: 466 non-fallback problems, risk budget active in 333`
+  - `[INFO] T10 R1d+R1b: 879 problems with a feasible moving candidate; v* = 0 chosen in 182 of them`
+  - `[INFO] T10 R1d+R1e: 896 problems with a feasible moving candidate; v* = 0 chosen in 187 of them`
   - `[INFO] T9 offline kinematic loop on planning_easy (60 s cap):`
   - `[INFO] scenario     arm           reached  length_m stop_cycles max_stop_run  switches  fallbacks  occupied`
   - `[INFO] static_east  g3 frozen           1     13.03           1            1         3          2         1`
   - `[INFO] static_east  g6 frozen           1     13.44           1            1         0          2         2`
-  - `[INFO] static_east  g6 + R1-R5          1     13.18           1            1         0          6         3`
+  - `[INFO] static_east  g6 fix it1          1     13.18           1            1         0          6         3`
+  - `[INFO] static_east  g6 fix it2          1     13.60           1            1         0          3         2`
   - `[INFO] static_ne    g3 frozen           1     10.11           1            1         1          0         0`
   - `[INFO] static_ne    g6 frozen           1     10.55           1            1         0          1         1`
-  - `[INFO] static_ne    g6 + R1-R5          1     10.23           1            1         0          0         0`
+  - `[INFO] static_ne    g6 fix it1          1     10.23           1            1         0          0         0`
+  - `[INFO] static_ne    g6 fix it2          1     10.52           1            1         0          1         1`
   - `[INFO] head_on      g3 frozen           1     13.55          42           10         4         15        14`
   - `[INFO] head_on      g6 frozen           0      5.49         438          437         6          0         0`
-  - `[INFO] head_on      g6 + R1-R5          1     13.54          10            9         1          4         4`
+  - `[INFO] head_on      g6 fix it1          1     13.54          10            9         1          4         4`
+  - `[INFO] head_on      g6 fix it2          1     14.03          37           35         1          6         6`
   - `[INFO] three_way    g3 frozen           1     13.56          14           11         4          7         6`
   - `[INFO] three_way    g6 frozen           1     14.27           1            1         4          2         1`
-  - `[INFO] three_way    g6 + R1-R5          1     13.79           1            1         1          2         2`
+  - `[INFO] three_way    g6 fix it1          1     13.79           1            1         1          2         2`
+  - `[INFO] three_way    g6 fix it2          1     14.32           1            1         1          3         2`
+  - `[INFO] gap_north    g3 frozen           1     13.89           1            1         3          2         2`
+  - `[INFO] gap_north    g6 frozen           1     14.01           1            1         0          3         3`
+  - `[INFO] gap_north    g6 fix it1          1     13.95           1            1         0          0         0`
+  - `[INFO] gap_north    g6 fix it2          1     14.04           1            1         0          5         3`
 
-## 3 V1 smoke ladder (g6; S3_climb_ne, head_on, M1_three_way; development seeds 101–103)
+## 5 V1 pre-screening (g6; S3_climb_ne, head_on, M1_three_way; seeds 101–103) [sim, n = 3 per cell, descriptive]
 
-Descriptive only (n = 3 development seeds per cell; no inference). One row per preset that ran, in run order; medians over the three seeds, sums for counts.
+| Preset | Variant | ok | M2 [m] | M3 [°] | M6 | Σ stall breaks | path switches | min dyn. clearance [m] | duration [s] | gap time [s] | gap median speed [m/s] | gap low-speed share | Σ R4 overrides |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| diag_only | M1_three_way | 3/3 | 15.82 | 83.5 | 3.0 | 16 | 18.0 | 0.810 | 50.5 | 21.5 | 0.05 | 0.787 | 0 |
+| diag_only | S3_climb_ne | 3/3 | 14.47 | 116.0 | 0.0 | 16 | 6.0 | — | 44.4 | — | — | — | 0 |
+| diag_only | head_on | 3/3 | 15.37 | 82.7 | 0.0 | 0 | 4.0 | 0.428 | 31.2 | — | — | — | 0 |
+| v1_r1_e | M1_three_way | 3/3 | 15.99 | 80.7 | 4.0 | 1 | 15.0 | 0.729 | 38.7 | 10.0 | 0.11 | 0.482 | 0 |
+| v1_r1_e | S3_climb_ne | 3/3 | 15.12 | 106.2 | 0.0 | 0 | 6.0 | — | 33.7 | — | — | — | 0 |
+| v1_r1_e | head_on | 3/3 | 15.18 | 56.7 | 0.0 | 0 | 5.0 | 0.562 | 31.0 | — | — | — | 0 |
 
-| Preset | Variant | ok | M2 [m] | M3 [°] | M6 | Σ stall breaks | low-speed share | path switches | min dyn. clearance [m] | replans (Σ) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| diag_only | M1_three_way | 3/3 | 16.12 | 80.8 | 2.0 | 0 | 0.003 | 15.0 | 0.785 | goal:3 kappa:10 map:31 periodic:28 risk_Dk:156 |
-| diag_only | S3_climb_ne | 3/3 | 15.54 | 135.0 | 0.0 | 8 | 0.006 | 6.0 | — | goal:3 kappa:14 map:18 periodic:89 |
-| diag_only | head_on | 3/3 | 15.07 | 69.8 | 2.0 | 0 | 0.008 | 8.0 | 0.644 | goal:3 kappa:15 map:3 periodic:42 risk_Dk:135 |
-| v1_r1 | M1_three_way | 3/3 | 15.82 | 90.0 | 2.0 | 1 | 0.160 | 13.0 | 0.664 | goal:3 kappa:4 map:24 periodic:45 risk_Dk:208 |
-| v1_r1 | S3_climb_ne | 3/3 | 13.76 | 28.2 | 0.0 | 0 | 0.003 | 4.0 | — | goal:3 kappa:14 map:20 periodic:87 |
-| v1_r1 | head_on | 3/3 | 15.00 | 66.9 | 0.0 | 0 | 0.038 | 6.0 | 0.619 | goal:3 kappa:11 map:2 periodic:45 risk_Dk:112 |
-| v1_r2 | M1_three_way | 3/3 | 15.80 | 68.7 | 2.0 | 1 | 0.061 | 13.0 | 0.782 | goal:3 kappa:11 map:27 periodic:38 risk_Dk:182 |
-| v1_r2 | S3_climb_ne | 3/3 | 13.63 | 27.4 | 0.0 | 0 | 0.016 | 4.0 | — | goal:3 kappa:14 map:21 periodic:74 |
-| v1_r2 | head_on | 3/3 | 15.12 | 118.9 | 0.0 | 0 | 0.038 | 5.0 | 0.593 | goal:3 kappa:13 map:7 periodic:40 risk_Dk:137 |
-| v1_r3 | M1_three_way | 3/3 | 15.99 | 72.7 | 1.0 | 0 | 0.003 | 13.0 | 0.632 | goal:3 kappa:6 map:26 periodic:28 risk_Dk:197 |
-| v1_r3 | S3_climb_ne | 3/3 | 13.71 | 31.5 | 0.0 | 0 | 0.028 | 4.0 | — | goal:3 kappa:9 map:19 periodic:93 |
-| v1_r3 | head_on | 3/3 | 15.19 | 62.8 | 1.0 | 0 | 0.004 | 6.0 | 0.837 | goal:3 kappa:19 map:3 periodic:43 risk_Dk:125 |
-| v1_r4 | M1_three_way | 3/3 | 15.91 | 65.1 | 0.0 | 1 | 0.013 | 9.0 | 0.800 | goal:3 kappa:9 map:27 periodic:34 risk_Dk:222 |
-| v1_r4 | S3_climb_ne | 3/3 | 13.72 | 33.7 | 0.0 | 0 | 0.057 | 3.0 | — | goal:3 kappa:18 map:16 periodic:81 |
-| v1_r4 | head_on | 3/3 | 15.11 | 54.3 | 0.0 | 0 | 0.004 | 4.0 | 0.536 | goal:3 kappa:11 map:5 periodic:42 risk_Dk:148 |
-| v1_r4_r4m | M1_three_way | 2/3 | 16.05 | 59.9 | 0.0 | 16 | 0.184 | 8.0 | 0.332 | goal:3 kappa:2 map:16 periodic:42 risk_Dk:207 |
-| v1_r4_r4m | S3_climb_ne | 3/3 | 13.58 | 34.8 | 0.0 | 0 | 0.004 | 1.0 | — | goal:3 kappa:3 map:6 periodic:82 |
-| v1_r4_r4m | head_on | 3/3 | 15.41 | 63.0 | 0.0 | 0 | 0.004 | 2.0 | 0.635 | goal:3 kappa:14 map:4 periodic:44 risk_Dk:110 |
+Pre-registered V1 gates: no collision and every goal reached; minimum dynamic clearance not more than 0.05 m below diag_only (same variant and seed); M1_three_way narrow-gap traversal at most 2 × the diag_only time of the same seed.
 
-Gate outcome per ladder step:
+- diag_only (units —): gate failures 0; dwell-held switches under threat followed by a clearance drop > 0.05 m: 0.
+- v1_r1_e (units FX1): gate failures 4 — [{'cell': ['head_on', 'g6', '101'], 'diag_only': 0.655691806163464, 'gate': 'dynamic clearance', 'min_dyn': 0.562242648594661}, {'cell': ['M1_three_way', 'g6', '101'], 'diag_only': 0.9347901330553774, 'gate': 'dynamic clearance', 'min_dyn': 0.7916088374555401}, {'cell': ['head_on', 'g6', '102'], 'diag_only': 0.7987957555126419, 'gate': 'dynamic clearance', 'min_dyn': 0.7185855573964162}, {'cell': ['M1_three_way', 'g6', '102'], 'diag_only': 0.8182478787645902, 'gate': 'dynamic clearance', 'min_dyn': 0.7289702900262229}]; dwell-held switches under threat followed by a clearance drop > 0.05 m: 0.
 
-- diag_only (diag_only, units —): unsafe runs 0, avoidance delays 0.
-- v1_r1 (v1_r1, units FX1): unsafe runs 0, avoidance delays 0.
-- v1_r2 (v1_r2, units FX1+FX2): unsafe runs 0, avoidance delays 0.
-- v1_r3 (v1_r3, units FX1+FX2+FX3): unsafe runs 0, avoidance delays 0.
-- Switch adjustments made by the V1 gates: step v1_r4: avoidance delayed by the dwell -> r4m_dwell_free_only enabled
+### Repeatability: identical configuration (`diag_only`, frozen behaviour) and seed in two iterations [sim]
 
-### Gate stop in V1
+| Variant | Seed | min dyn. clearance it. 1 [m] | min dyn. clearance it. 2 [m] |
+|---|---|---||---|---|---|
+| head_on | 101 | 0.936 | 0.656 |
+| head_on | 102 | 0.698 | 0.799 |
+| head_on | 103 | 0.644 | 0.428 |
+| M1_three_way | 101 | 0.785 | 0.935 |
+| M1_three_way | 102 | 0.821 | 0.818 |
+| M1_three_way | 103 | 0.839 | 0.810 |
 
-`GATE_FAILURE_v1_20261031_035301.md` — Gate-V1 safety: unsafe after the R4-m fallback at v1_r4
+### M1_three_way narrow gap (y 0.7–3.2 m) in every V1 run [sim]
 
-r4_delays:
+| Iteration | Preset | Seed | traversal [s] | median speed [m/s] | low-speed share |
+|---|---|---|---|---|---|
+| 1 | diag_only | 101 | 7.2 | 0.378 | 0.00 |
+| 1 | diag_only | 102 | 5.5 | 0.513 | 0.00 |
+| 1 | diag_only | 103 | 4.1 | 0.668 | 0.00 |
+| 1 | v1_r1 | 101 | 9.9 | 0.098 | 0.51 |
+| 1 | v1_r1 | 102 | 15.4 | 0.097 | 0.53 |
+| 1 | v1_r1 | 103 | 6.4 | 0.295 | 0.00 |
+| 1 | v1_r2 | 101 | 13.6 | 0.080 | 0.53 |
+| 1 | v1_r2 | 102 | 6.6 | 0.387 | 0.00 |
+| 1 | v1_r2 | 103 | 7.7 | 0.311 | 0.24 |
+| 1 | v1_r3 | 101 | 5.3 | 0.483 | 0.00 |
+| 1 | v1_r3 | 102 | 5.3 | 0.490 | 0.00 |
+| 1 | v1_r3 | 103 | 5.8 | 0.465 | 0.00 |
+| 1 | v1_r4 | 101 | 6.3 | 0.347 | 0.00 |
+| 1 | v1_r4 | 102 | 12.2 | 0.085 | 0.50 |
+| 1 | v1_r4 | 103 | 7.0 | 0.334 | 0.04 |
+| 1 | v1_r4_r4m | 101 | 14.7 | 0.080 | 0.57 |
+| 1 | v1_r4_r4m | 102 | 15.2 | 0.058 | 0.65 |
+| 1 | v1_r4_r4m | 103 | 7.7 | 0.304 | 0.00 |
+| 2 | diag_only | 101 | 22.8 | 0.053 | 0.79 |
+| 2 | diag_only | 102 | 7.2 | 0.351 | 0.00 |
+| 2 | diag_only | 103 | 21.5 | 0.027 | 0.79 |
+| 2 | v1_r1_e | 101 | 10.0 | 0.085 | 0.52 |
+| 2 | v1_r1_e | 102 | 6.3 | 0.450 | 0.00 |
+| 2 | v1_r1_e | 103 | 14.0 | 0.109 | 0.48 |
 
-- `{'cell': ['head_on', 'g6', '101'], 't': 1793444696.86, 'window_min_dyn': 0.555, 'reference_min_dyn': 0.936}`
-- `{'cell': ['head_on', 'g6', '101'], 't': 1793444696.96, 'window_min_dyn': 0.569, 'reference_min_dyn': 0.936}`
-- `{'cell': ['head_on', 'g6', '101'], 't': 1793444697.56, 'window_min_dyn': 0.726, 'reference_min_dyn': 0.936}`
-- `{'cell': ['head_on', 'g6', '101'], 't': 1793444697.66, 'window_min_dyn': 0.761, 'reference_min_dyn': 0.936}`
-- `{'cell': ['head_on', 'g6', '102'], 't': 1793445200.021, 'window_min_dyn': 0.592, 'reference_min_dyn': 0.698}`
-- `{'cell': ['head_on', 'g6', '102'], 't': 1793445200.121, 'window_min_dyn': 0.601, 'reference_min_dyn': 0.698}`
-- `{'cell': ['head_on', 'g6', '102'], 't': 1793445200.221, 'window_min_dyn': 0.615, 'reference_min_dyn': 0.698}`
+## 6 V2 pre-screening ablation (seeds 1–3; g3, g5, g6 × all_off / all_on × 6 variants) [sim, n = 3, descriptive]
 
-unsafe_after_r4m:
+Not executed in this iteration (stopped before V2).
 
-- `{'cell': ['M1_three_way', 'g6', '102'], 'end_reason': 'timeout (F-2)', 'M4': '0', 'log_dir': '/home/amov/.ros/ablation_fix/v1/v1_r4_r4m/M1_three_way/g6/seed102_a1'}`
+## 7 V3 formal evaluation
 
-Timeline of `/home/amov/.ros/ablation_fix/v1/v1_r4_r4m/M1_three_way/g6/seed102_a1` (generated from cycles.csv / cycles_ext.csv):
+**Not started — requires explicit manual confirmation.** Specification:
 
-- goal [0, 14, 1.5]; 822 cycles from t0 + 3.1 s to t0 + 86.4 s
-- cycles with lambda > 0: 474 of 822; with lambda >= 0.5: 165, between t0 + 20.5 and 43.0 s, reference height 1.04 .. 2.25 m in those cycles
-- 14 stall breaks between t0 + 58.0 and 85.0 s at height 1.08 .. 1.39 m, 0.81 .. 1.36 m from the goal; lambda at the breaks 0.00 .. 0.02; v = 0 was the optimum in 11 .. 12 of the 12 cycles before each break
-- slowest global searches: 11123 ms (risk_Dk, t0 + 84.7 s), 10495 ms (risk_Dk, t0 + 73.4 s), 10107 ms (risk_Dk, t0 + 63.0 s), 9421 ms (risk_Dk, t0 + 52.9 s)
-- end: reference 0.77 m from the goal at height 1.41 m
+- Seeds 21–40 (fresh, never used in V1/V2); all six variants; groups g3 and g6 (g5 optional) × `all_off` / `all_on` (the V1-decided configuration); arms interleaved per seed; 480 runs (720 with g5), about 3 min each.
+- Per arm, the project's `post_process_ablation.py --index` (validity rules, M1–M6, Wilcoxon–Pratt, Holm, bootstrap, exact McNemar). Cross-arm contrasts with the same functions, one Holm family per variant × metric: A = g6 fixed vs g6 frozen, B = g6 fixed vs g3 frozen, C = g3 fixed vs g3 frozen, D = g6 frozen vs g3 frozen; bootstrap 10 000 resamples, seed 20261026.
+- Start command after confirmation: `pipeline.py run-v3 --confirm-v3 [--with-g5]`.
 
-## 4 V2 screening (seeds 1–5; g3, g5, g6 × all_off / all_on × 6 variants)
+## 8 Gate stops in this iteration
 
-Not executed: the pipeline stopped before V2 (gate stop above).
+- `GATE_FAILURE_v1_iter2_20261031_070501.md` (2026-10-31 07:05:01) — Gate-V1: 4 V1 gate failures at v1_r1_e
+  - {'gate': 'dynamic clearance', 'cell': ['head_on', 'g6', '101'], 'min_dyn': 0.562, 'diag_only': 0.656}
+  - {'gate': 'dynamic clearance', 'cell': ['M1_three_way', 'g6', '101'], 'min_dyn': 0.792, 'diag_only': 0.935}
+  - {'gate': 'dynamic clearance', 'cell': ['head_on', 'g6', '102'], 'min_dyn': 0.719, 'diag_only': 0.799}
+  - {'gate': 'dynamic clearance', 'cell': ['M1_three_way', 'g6', '102'], 'min_dyn': 0.729, 'diag_only': 0.818}
 
-## 5 V3 confirmation (fresh seeds 21–40; g3, g6 × all_off / all_on × 6 variants)
-
-Not executed: the pipeline stopped before V3 (gate stop above).
-
-
-
-
-
-## 6 Thesis material
+## 9 Thesis material
 
 ### §4.2.4 (addition to the Chapter-4 discussion; frozen numbers only)
 
@@ -157,31 +219,36 @@ not causal evidence. Chapter 4 reports the frozen baseline; the repair is evalua
 
 ### §4.5 Supplementary extended analysis: repair of the coupling defects
 
-**Scope.** This section reports a defect repair implemented in this work and the evaluation run on it. It does not
-replace §4.1–4.3, whose conclusions are derived only from the frozen baseline `thesis-frozen-v1`. The repaired planner is the
-frozen code plus repair items FX1–FX6, each behind a Boolean flag that defaults to false; with every flag off the
-planner output is byte-identical to the frozen reference (offline golden test T0) and the run-log writers are
-unchanged.
+**Scope.** This section reports a defect repair implemented in this work and its evaluation. It does not replace
+§4.1–4.3, whose conclusions are derived only from the frozen baseline `thesis-frozen-v1`. The repaired planner is the frozen code
+plus repair items FX1–FX6, each behind a Boolean flag that defaults to false; with every flag off the planner output is
+byte-identical to the frozen reference (offline golden test T0) and the run-log writers are unchanged.
 
-**Protocol.** The evaluation was pre-registered as a gated sequence: V1 incremental smoke ladder (development seeds
-101–103), V2 screening (seeds 1–5) and V3 confirmation (fresh seeds 21–40). A failed gate stops the sequence.
+**Protocol.** Pre-registered gated sequence: dry run in a sandbox; V1 incremental smoke ladder (development seeds
+101–103); V2 screening of {g3, g5, g6} × {off, on} × six variants (seeds 1–3); V3 confirmation on fresh seeds 21–40
+only after manual confirmation. A failed gate stops the sequence; the next iteration starts with a changed design and a
+new dry run, and every iteration is reported.
 
-**Outcome.** The evaluation stopped at the V1 safety gate: Gate-V1 safety (unsafe after the R4-m fallback at v1_r4). Switch adjustments made before the stop:
-step v1_r4: avoidance delayed by the dwell -> r4m_dwell_free_only enabled. The later stages were not run. Consequently this work makes **no claim** that the repair mitigates the
-path-quality degradation of g6 relative to g3; the V1 observations (Appendix C) are descriptive clues from three
-development seeds per cell, not evidence. The repair remains available behind default-false flags, and the frozen
-baseline of Chapter 4 is unaffected.
+**Outcome.** The evaluation stopped at the V1 gate: Gate-V1 (4 V1 gate failures at v1_r1_e). Switch adjustments made before the stop: no repair switch had to be disabled or downgraded.
+The later stages were not run, so this work makes **no claim** that the repair mitigates the path-quality degradation
+of g6 relative to g3; the V1/V2 observations are descriptive screening data, not evidence.
+
 
 ### Limitations (additions)
 
 - The frozen baseline contains coupling defects that degrade path quality even in static scenes; Chapter 4 reports it
   with these defects.
-- The repair evaluation stopped at the V1 safety gate, so whether the repair mitigates the degradation is not
-  established.
-- In the run that stopped the evaluation, the reference descended during a dynamic avoidance manoeuvre and was then
-  held at v = 0 below the goal height, advancing only through the stall breaker until the timeout. Why every moving
-  candidate was rejected there, and whether a repair item contributes, cannot be identified from a single run (the
-  same configuration's repeated attempt reached the goal).
+- The repair evaluation uses one simulated world; V1/V2 are screening with three seeds per cell.
+- FX3 guarantees decision consistency only for routes through cached edges; FX4 can delay a voluntary switch by at most
+  T_g plus one replanning period in threat-free mode (none under a threat with R4-m).
+- The frozen dynamic constraint (time-to-collision > τ₂ = 12 s) also applies to a stationary obstacle; near a goal that
+  lies on such an obstacle's safety sphere it admits only approach speeds ≤ (d − R)/τ₂ (a creeping approach). This is a
+  property of the frozen model, not of the repair, and it is not changed here.
+- Simulator repeatability limits the screening: the same configuration (frozen behaviour) on the same seed gave
+  minimum dynamic clearances differing by up to 0.28 m between two runs, so a per-run 0.05 m clearance gate cannot
+  separate configuration effects from simulator nondeterminism; the M1_three_way narrow-gap low-speed passage also
+  occurred with the frozen behaviour in two of three seeds in one iteration and in none in the other.
+- The repaired version is a post-campaign patch; the conclusions of Chapter 4 rest on the frozen version.
 
 ### Defence Q&A
 
@@ -189,11 +256,15 @@ baseline of Chapter 4 is unaffected.
   obstacles; statistically the effect is attributed only to C2 + C3 jointly.
 - *What does the thesis do about it?* Chapter 4 reports the frozen results unchanged; §4.2.4 explains the mechanisms
   and labels the log evidence as associative; §4.5 documents the repair and its gated evaluation.
-- *What was repaired, and was it verified?* FX1–FX6 behind default-false flags, verified offline (golden identity, unit
-  tests). The closed-loop evaluation stopped at the V1 safety gate; no mitigation claim is made.
+- *What was repaired, and how was it verified?* FX1–FX6 behind default-false flags; a sandbox dry run and offline
+  golden identity before deployment; closed-loop V1/V2 screening with safety gates; V3 on fresh seeds only after
+  manual confirmation. Only the simulations count as evidence.
 - *Why not modify the baseline directly?* Changing the model after the campaign and re-reporting would turn the
   evaluation into tuning on the test results; the tag keeps Chapter 4 reproducible and the flags keep the repair
   auditable and reversible.
-- *Why was the evaluation not simply continued?* The gates were fixed before any simulation; continuing past a failed
-  safety gate, or relaxing it after seeing the outcome, would invalidate the protocol.
+- *Did a repair item fail?* Iteration 1 stopped at the V1 safety gate (a mission failure). Its runs with the
+  speed-proportional cone slack (R1b) showed long low-speed phases in a narrow gap, and R1b was replaced by R1e in
+  iteration 2. That association did not replicate: in iteration 2 the frozen behaviour itself showed the same
+  low-speed passage in two of three seeds, and R1e showed it in two of three. Iteration 2 stopped at the V1
+  dynamic-clearance gate. Every iteration and gate stop is listed in this report.
 
