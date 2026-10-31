@@ -313,7 +313,8 @@ def preset_flags(R, name):
 
 def run_batch(R, out, tag, preset, seeds, variants, groups):
     out = os.path.abspath(out)
-    if not out.startswith(STATE_ROOT + os.sep) or os.path.realpath(out).startswith(os.path.realpath(R['frozen_out'])):
+    inside_frozen = (os.path.realpath(out) + os.sep).startswith(os.path.realpath(R['frozen_out']) + os.sep)
+    if not out.startswith(STATE_ROOT + os.sep) or inside_frozen:
         raise GateFailure('Gate-I output', 'refusing to write outside %s: %s' % (STATE_ROOT, out))
     os.makedirs(out, exist_ok=True)
     env = dict(os.environ, OUT=out, TAG=tag, FIXES_FILE=preset, SEEDS=' '.join(map(str, seeds)), VARIANTS=' '.join(variants),
