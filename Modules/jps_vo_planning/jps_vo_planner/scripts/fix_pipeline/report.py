@@ -182,7 +182,7 @@ def cross_iteration(w):
     w('### Repeatability: identical configuration (`diag_only`, frozen behaviour) and seed in two iterations [sim]')
     w('')
     w('| Variant | Seed | %s |' % ' | '.join('min dyn. clearance it. %d [m]' % i for i in its))
-    w('|---|---|%s' % '---|' * len(its))
+    w('|---|---|%s' % ('---|' * len(its)))
     for v in ('head_on', 'M1_three_way'):
         for s in ('101', '102', '103'):
             vals = [runs.get((i, 'diag_only', v, s), {}).get('min_dyn', '') for i in its]
