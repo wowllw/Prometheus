@@ -25,6 +25,10 @@ namespace jps_vo
     const GlobalPath *path = nullptr;                 // nullptr: no global path
     const OccupancyGrid *grid = nullptr;
     std::vector<ObstacleState> obs;                   // states at the planning time
+    Eigen::Vector3d h_prev = Eigen::Vector3d::Zero(); // [fix R1c] last heading with |v_ref| >= v_min (zero: none)
+    bool free_mode = false;                           // [fix R5] threat-free mode (no lambda > 0 for >= T_c)
+    double theta_floor = 0.0;                         // [fix R1d] smallest angle to t_g of a feasible moving candidate
+    bool floor_set = false;                           // [fix R1d] theta_floor computed for this problem
   };
 
   struct LocalSolution
@@ -33,6 +37,10 @@ namespace jps_vo
     double s_g = 0.0, J = 0.0, J_A = 0.0, J_B = 0.0, Gamma = 0.0, rho = 0.0;
     bool fallback = false;
     int n_candidates = 0, n_feasible = 0;
+    // [fixes] angle excess over the cone (equals s_g when R1a/R1b/R5 are off), cone half-angle used,
+    // weighted-sum value for S1, and whether the S1 risk budget was active
+    double ang_excess = 0.0, theta_eff = 0.0, J_ws = 0.0;
+    bool budget_active = false;
   };
 
   class LocalPlanner
@@ -63,6 +71,9 @@ namespace jps_vo
 
   private:
     LocalSolution fallback(const LocalProblem &P, const std::vector<Eigen::Vector3d> &cand) const; // eq. (40)
+    double coneTheta(const LocalProblem &P, double lambda) const;  // [fix R1a/R1d/R5] cone half-angle
+    double feasibleConeFloor(const LocalProblem &P) const;         // [fix R1d]
+    LocalSolution solveBudget(const LocalProblem &P) const;        // [fix S1] epsilon-constraint variant of solve()
     Eigen::Vector3d goalDir(const LocalProblem &P) const;
 
     ModelConstants c_;

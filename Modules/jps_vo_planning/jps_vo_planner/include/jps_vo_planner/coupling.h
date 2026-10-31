@@ -40,6 +40,25 @@ namespace jps_vo
     double safetyRadius(double r_o) const { return r_q + r_o + d_min; }        // R_o
   };
 
+  // Engineering fixes after thesis-frozen-v1 (fixes design note R1-R5, S1). Every flag defaults to false; with all
+  // flags false every frozen code path runs unchanged. Set from the launch parameters ~fixes/<name> only.
+  struct Fixes
+  {
+    bool r1a_reachable_cone = false;       // R1a cone widened to the heading reachable in one cycle under (C-a)
+    bool r1b_continuous_slack = false;     // R1b cone slack = dist(v, K) / v_c, continuous at v = 0
+    bool r1c_heading_memory = false;       // R1c Gamma turn term measured against the last heading when |v_prev| < v_min
+    bool r1d_feasible_cone = false;        // R1d cone never narrower than the closest feasible moving candidate
+    bool r2a_kappa_decay = false;          // R2a kappa peak-hold with exp(-dt / T_g) release instead of a per-cycle clear
+    bool r2b_kappa_local_excluded = false; // R2b J_A = V_Pi computed without kappa
+    bool r3_relevant_trigger = false;      // R3 replan on remaining-path increase / off-path decrease > eps_w only
+    bool r4_switch_hysteresis = false;     // R4 geometric switch only if cheaper by eps_w and T_g after the last switch
+    bool r4m_dwell_free_only = false;      // R4-m the R4 dwell applies only in threat-free mode; the eps_w margin always
+    bool r5_mode_gating = false;           // R5 cone base width atan(e_cut / ell_W) while threat-free for >= T_c
+    bool s1_eps_constraint = false;        // S1 risk budget rho <= 1 - lambda instead of the weighted rho term
+    bool diag_log = false;                 // extended diagnostics only (cycles_ext.csv, switches_ext.csv)
+    bool any() const;
+  };
+
   // Ablation switches (subtask3_porting_plan.md section 5); set from launch parameters only
   struct Switches
   {
@@ -59,6 +78,7 @@ namespace jps_vo
     ThetaCMode theta_c_mode = ThetaCMode::Linear;
     double theta_c_fixed = M_PI / 2.0;
     XiSource xi_source = XiSource::Reference;
+    Fixes fx; // engineering fixes after thesis-frozen-v1; all false = frozen behaviour
 
     // parse "adaptive" | "zero" | "one" | "const:<c>" etc.; false on unknown text
     bool parseLambdaMode(const std::string &s);
@@ -101,6 +121,15 @@ namespace jps_vo
   double gammaV(const Eigen::Vector3d &v, const Eigen::Vector3d &v_prev, double lambda, const ModelConstants &c);
   // eq. (35) Gamma_e; t_prev = zero vector means "no previous direction" -> 0 [ENG]
   double gammaE(const Eigen::Vector3d &t_prev, const Eigen::Vector3d &t_e, double lambda_e, const ModelConstants &c);
+
+  // ---- fixes after thesis-frozen-v1 (used only when the matching Fixes flag is on) ----
+  // R1a: largest heading change reachable in one cycle from speed s under (C-a): 2 s sin(phi / 2) <= a_max dt
+  double reachTurn(double s, const ModelConstants &c);
+  // R1b: dist(v, K(theta)) / v_c with K(theta) = {u : angle(u, t_g) <= theta} plus the apex 0
+  double coneSlack(const Eigen::Vector3d &v, const Eigen::Vector3d &t_g, double theta, const ModelConstants &c);
+  // R1c: eq. (34) whose turn term uses h_prev as the previous heading while |v_prev| < v_min
+  double gammaV(const Eigen::Vector3d &v, const Eigen::Vector3d &v_prev, double lambda, const ModelConstants &c,
+                const Eigen::Vector3d &h_prev);
 
   // eq. (12): w in CC_{A|o} with x = p_o - p_A (requires ||x|| > R)
   bool inCollisionCone(const Eigen::Vector3d &x, const Eigen::Vector3d &w, double R);

@@ -90,6 +90,7 @@ namespace jps_vo
     int stall_hold_remaining_ = 0;
     Eigen::Vector3d stall_v_esc_ = Eigen::Vector3d::Zero();
     void writePathEvents(const std::vector<PathEvent> &events);
+    void writeSwitchDiags(const std::vector<SwitchDiag> &diags); // [fixes] switches_ext.csv
     void writeChecks();
     bool formatOk(const UniformCubicBspline &traj) const; // checklist B-1 ... B-5
 
@@ -107,6 +108,8 @@ namespace jps_vo
     ros::Timer local_timer_, odom_gt_timer_;
     std::string log_dir_;
     std::ofstream cycles_csv_, paths_csv_, pi0_csv_, odom_gt_csv_;
+    std::ofstream cycles_ext_csv_, switches_ext_csv_; // [fixes] written only when a Fixes flag is on
+    bool ext_open_ = false;
     bool logs_open_ = false, pi0_written_ = false;
     double goal_t0_ = 0.0;
     ros::Time last_cycle_time_;

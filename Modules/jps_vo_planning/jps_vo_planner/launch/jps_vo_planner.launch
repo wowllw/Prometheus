@@ -33,6 +33,8 @@
   <arg name="tie_rule" default=""/>              <!-- strict | literal (eq. 7 tie rule, pending decision) -->
   <arg name="search_margin" default=""/>
   <arg name="async_global" default=""/>
+  <!-- engineering fixes after thesis-frozen-v1: name of a file in config/fixes/ ("" = none = frozen behaviour) -->
+  <arg name="fixes_file" default=""/>
 
   <node pkg="jps_vo_planner" type="jps_vo_planner_node" name="uav$(arg uav_id)_jps_vo_planner_node" output="screen">
     <remap from="~odom"          to="/uav$(arg uav_id)$(arg odometry_topic)"/>
@@ -48,6 +50,7 @@
 
     <rosparam command="load" file="$(find jps_vo_planner)/config/jps_vo_params.yaml"/>
     <rosparam command="load" file="$(find jps_vo_planner)/config/groups/$(arg group).yaml"/>
+    <rosparam if="$(eval arg('fixes_file') != '')" command="load" file="$(find jps_vo_planner)/config/fixes/$(arg fixes_file).yaml"/>
     <param name="uav_id" value="$(arg uav_id)"/>
     <param name="planner_mode" value="$(arg planner_mode)"/>
     <param name="group" value="$(arg label)"/>

@@ -19,6 +19,7 @@ namespace jps_vo
     int dir_out = 13;
     double w = 0.0;       // edge weight w_e (eq. 39), refreshed every cycle
     uint64_t key = 0;     // identity of the G_J state transition (from, to, dir_in)
+    double kappa = 0.0;   // [fix R2b] kappa part of w when the path was searched (or refreshed)
   };
 
   class GlobalPath
@@ -43,6 +44,8 @@ namespace jps_vo
 
     double costToGo(double s) const;                                    // C_Pi(s), eq. (23), omega = w_e / ell_e
     double value(const Eigen::Vector3d &q, double L_s) const;           // V_Pi(q), eq. (23)
+    double costToGoNoKappa(double s) const;                             // [fix R2b] C_Pi(s) with w_e - kappa_e
+    double valueNoKappa(const Eigen::Vector3d &q, double L_s) const;    // [fix R2b] V_Pi(q) with w_e - kappa_e
     Eigen::Vector3d guideTangent(double s, double ell_w) const;         // t_g(s), eq. (27)
     int edgeAt(double s) const;
 

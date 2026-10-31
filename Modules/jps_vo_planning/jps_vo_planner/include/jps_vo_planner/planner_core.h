@@ -16,6 +16,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "jps_vo_planner/coupling.h"
@@ -67,6 +68,22 @@ namespace jps_vo
     int n_feasible = 0, n_candidates = 0;
     double J = 0.0;
     Eigen::Vector3d t_g = Eigen::Vector3d::Zero();
+    // [fixes] diagnostics after thesis-frozen-v1 (filled only when a Fixes flag is on; cycles_ext.csv)
+    double theta_eff = 0.0, ang_excess = 0.0, reach_turn = 0.0, ang_vprev_tg = 0.0;
+    double J_A = 0.0, J_B = 0.0, Gamma = 0.0, cone_term = 0.0, rho_star = 0.0;
+    double kappa_on_ek = 0.0, kappa_bound = 0.0;
+    int zero_is_opt = 0, ray_feasible = 0, free_mode = 0, e_k = -1, kappa_map_size = 0, budget_active = 0;
+  };
+
+  // [fixes] one global search as seen by the R3 trigger and the R4 switch rule (switches_ext.csv)
+  struct SwitchDiag
+  {
+    double t = 0.0;
+    std::string reason;
+    int is_switch = 0, accepted = 1, forced = 0, dwell_applied = 0;
+    double C_old = 0.0, C_new = 0.0, dwell_left = 0.0;
+    double up = 0.0, down = 0.0; // R3 sums of the last trigger evaluation
+    int n_on = 0, n_off = 0;
   };
 
   struct GlobalStepResult
@@ -112,6 +129,7 @@ namespace jps_vo
     GlobalPath path() const;
     GlobalPath pi0() const;
     std::vector<PathEvent> takePathEvents();
+    std::vector<SwitchDiag> takeSwitchDiags(); // [fixes] filled only when a Fixes flag is on
 
     // ---- pieces exposed for the offline tests ----
     // edge weight w_e of eq. (39) for the jump from -> to entered with dir_in, using the current kappa
@@ -124,6 +142,10 @@ namespace jps_vo
                              const std::vector<ObstacleState> &obs) const;
     bool dirDependentWeights() const;
     LocalProblem lastLocalProblem() const;
+    // [fix R3] trigger restricted to the remaining path (increase) and the off-path cached edges (decrease):
+    // "none", "risk_Dk" or "kappa"
+    std::string changedEdgesRelevant(const OccupancyGrid &grid, const GlobalPath &path, const Eigen::Vector3d &p_ref,
+                                     const Eigen::Vector3d &v_ref, const std::vector<ObstacleState> &obs) const;
 
   private:
     struct CachedEdge
@@ -158,6 +180,19 @@ namespace jps_vo
     // global-step-only state
     double last_replan_t_ = -1e18;
     std::unordered_map<unsigned long long, CachedEdge> cache_; // edges relaxed by the last search (D_k domain)
+    // ---- [fixes] after thesis-frozen-v1 ----
+    double kappa_bound_ = 0.0;                         // R2a: kappa <= kappa_bound_ (guarded by mtx_)
+    Eigen::Vector3d h_last_ = Eigen::Vector3d::Zero(); // R1c: last heading with |v_ref| >= v_min (mtx_)
+    bool free_mode_ = true;                            // R5 (mtx_)
+    double t_threat_ = -1e18;                          // R5: last time with lambda > 0 (mtx_)
+    double last_switch_t_ = -1e18;                     // R4: time of the last accepted geometric switch (mtx_)
+    std::vector<SwitchDiag> switch_diags_;             // (mtx_)
+    struct TriggerDiag
+    {
+      double up = 0.0, down = 0.0;
+      int n_on = 0, n_off = 0;
+    };
+    mutable TriggerDiag last_trigger_; // R3, global step only
   };
 
 } // namespace jps_vo

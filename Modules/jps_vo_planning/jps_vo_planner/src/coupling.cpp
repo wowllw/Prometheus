@@ -238,4 +238,57 @@ namespace jps_vo
     return (xw - std::sqrt(disc)) / w2; // smaller root of ||x - w t|| = R
   }
 
+  // ---------------------------------------------------------------- fixes after thesis-frozen-v1
+
+  bool Fixes::any() const
+  {
+    return r1a_reachable_cone || r1b_continuous_slack || r1c_heading_memory || r1d_feasible_cone || r2a_kappa_decay ||
+           r2b_kappa_local_excluded || r3_relevant_trigger || r4_switch_hysteresis || r4m_dwell_free_only ||
+           r5_mode_gating ||
+           s1_eps_constraint || diag_log;
+  }
+
+  double reachTurn(double s, const ModelConstants &c)
+  {
+    if (!(s > 1e-12))
+      return M_PI; // at rest every heading is reachable
+    return 2.0 * std::asin(std::min(1.0, c.a_max * c.dt / (2.0 * s)));
+  }
+
+  double coneSlack(const Eigen::Vector3d &v, const Eigen::Vector3d &t_g, double theta, const ModelConstants &c)
+  {
+    const double sp = v.norm();
+    if (sp <= 1e-12 || t_g.norm() <= 1e-9)
+      return 0.0;
+    const double excess = angleBetween(v, t_g) - theta;
+    if (excess <= 0.0)
+      return 0.0;
+    // nearest point of K: on the generator at angle theta when excess <= pi/2, otherwise the apex
+    return (excess <= 0.5 * M_PI ? sp * std::sin(excess) : sp) / c.v_c;
+  }
+
+  double gammaV(const Eigen::Vector3d &v, const Eigen::Vector3d &v_prev, double lambda, const ModelConstants &c,
+                const Eigen::Vector3d &h_prev)
+  {
+    const double f = lambda * (1.0 - lambda);
+    if (f <= 0.0)
+      return 0.0;
+    Eigen::Vector3d h = Eigen::Vector3d::Zero();
+    if (v_prev.norm() >= c.v_min)
+      h = v_prev.normalized();
+    else if (h_prev.norm() > 1e-9)
+      h = h_prev.normalized(); // a turn through a low-speed phase still pays for the heading change
+    double psi_theta = 0.0;
+    if (v.norm() >= c.v_min && h.squaredNorm() > 0.0)
+      psi_theta = (1.0 - v.normalized().dot(h)) / (1.0 - std::cos(c.theta_max));
+    Eigen::Vector3d dv = v - v_prev;
+    if (v_prev.norm() >= c.v_min)
+    {
+      const Eigen::Vector3d hp = v_prev.normalized();
+      dv -= hp * hp.dot(dv); // P_perp = I - h h^T, as in the frozen eq. (34)
+    }
+    const double psi_a = dv.squaredNorm() / std::pow(c.a_max * c.dt, 2);
+    return f * (c.w_theta * psi_theta + c.w_a * psi_a);
+  }
+
 } // namespace jps_vo

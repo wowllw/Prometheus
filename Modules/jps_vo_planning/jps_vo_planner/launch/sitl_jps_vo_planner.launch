@@ -11,6 +11,7 @@
   <arg name="max_acc" default="0.8"/>
   <arg name="replan_period" default="1.0"/>
   <arg name="pre_rotate_yaw" default="true"/>
+  <arg name="fixes_file" default=""/>  <!-- engineering fixes after thesis-frozen-v1; "" = frozen behaviour -->
 
   <include file="$(find jps_vo_planner)/launch/jps_vo_planner.launch">
     <arg name="uav_id" value="$(arg uav_id)"/>
@@ -21,6 +22,7 @@
     <arg name="max_acc" value="$(arg max_acc)"/>
     <arg name="replan_period" value="$(arg replan_period)"/>
     <arg name="pre_rotate_yaw" value="$(arg pre_rotate_yaw)"/>
+    <arg name="fixes_file" value="$(arg fixes_file)"/>
   </include>
 
   <!-- trajectory server: identical to the ego_planner launch, binary reused from package ego_planner -->

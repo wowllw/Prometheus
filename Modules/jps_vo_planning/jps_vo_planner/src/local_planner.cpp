@@ -136,7 +136,12 @@ namespace jps_vo
 
     // J_A = V_Pi(q(v)) (23)(24); no global path -> straight-line distance to the goal [ENG-9]
     if (lam < 1.0)
-      s.J_A = (P.path && !P.path->empty()) ? P.path->value(q, P.L_s) : (P.goal - q).norm() / P.L_s;
+    {
+      if (P.path && !P.path->empty())
+        s.J_A = sw_.fx.r2b_kappa_local_excluded ? P.path->valueNoKappa(q, P.L_s) : P.path->value(q, P.L_s); // [fix R2b]
+      else
+        s.J_A = (P.goal - q).norm() / P.L_s;
+    }
 
     // J_B = ||q_pref - q(v)|| / L_s + rho(sigma(v)) (24)
     if (lam > 0.0)
@@ -152,24 +157,77 @@ namespace jps_vo
         sg.d = v.norm() > 1e-12 ? Eigen::Vector3d(v.normalized()) : Eigen::Vector3d::Zero();
         sg.t_rel = 0.0;
         s.rho = segmentRisk(sg, P.obs, c_).rho;
-        s.J_B += s.rho;
+        if (!(sw_.fx.s1_eps_constraint && lam > 0.0)) // [fix S1] the risk becomes a budget, not a weighted term
+          s.J_B += s.rho;
       }
     }
 
-    s.Gamma = sw_.enable_gamma ? gammaV(v, P.v_prev, lam, c_) : 0.0; // (34)
+    if (sw_.enable_gamma) // (34); [fix R1c] turn term against the last heading through a low-speed phase
+      s.Gamma = sw_.fx.r1c_heading_memory ? gammaV(v, P.v_prev, lam, c_, P.h_prev) : gammaV(v, P.v_prev, lam, c_);
 
     // (28): minimal slack, s_g = max(0, angle(v, t_g) - theta_c)
     if (sw_.enable_c3 && P.t_g.norm() > 1e-9 && v.norm() > 1e-12)
-      s.s_g = std::max(0.0, angleBetween(v, P.t_g) - thetaC(lam, sw_));
+    {
+      if (!(sw_.fx.r1a_reachable_cone || sw_.fx.r1b_continuous_slack || sw_.fx.r1d_feasible_cone || sw_.fx.r5_mode_gating))
+      {
+        s.s_g = std::max(0.0, angleBetween(v, P.t_g) - thetaC(lam, sw_));
+        s.ang_excess = s.s_g;
+      }
+      else
+      {
+        // [fix R1a/R5] cone half-angle; [fix R1b] slack = distance to the cone in velocity space / v_c
+        s.theta_eff = coneTheta(P, lam);
+        s.ang_excess = std::max(0.0, angleBetween(v, P.t_g) - s.theta_eff);
+        s.s_g = sw_.fx.r1b_continuous_slack ? coneSlack(v, P.t_g, s.theta_eff, c_) : s.ang_excess;
+      }
+    }
 
     s.J = (1.0 - lam) * s.J_A + lam * s.J_B + s.Gamma + c_.rho_g * s.s_g; // (36)(37)
     if (sw_.c3_soft_tracking > 0.0)
       s.J += sw_.c3_soft_tracking * (v - c_.v_c * P.t_g).squaredNorm(); // A6 only
+    s.J_ws = (sw_.fx.s1_eps_constraint && lam > 0.0) ? s.J + lam * s.rho : s.J; // [fix S1] frozen weighted-sum value
     return s;
+  }
+
+  double LocalPlanner::coneTheta(const LocalProblem &P, double lam) const
+  {
+    double th = thetaC(lam, sw_);
+    if (sw_.fx.r5_mode_gating && P.free_mode) // [fix R5] corridor tolerance e_cut over the guidance window ell_W
+      th = std::max(th, std::atan(c_.e_cut / c_.ellW()));
+    if (sw_.fx.r1a_reachable_cone) // [fix R1a] never narrower than the heading lag that one cycle cannot remove
+      th = std::max(th, angleBetween(P.v_prev, P.t_g) - reachTurn(P.v_prev.norm(), c_));
+    if (sw_.fx.r1d_feasible_cone && P.floor_set) // [fix R1d] the cone never excludes every feasible moving velocity
+      th = std::max(th, P.theta_floor);
+    return std::min(th, M_PI);
+  }
+
+  double LocalPlanner::feasibleConeFloor(const LocalProblem &P) const
+  {
+    // smallest angle to t_g over the moving candidates that satisfy (38); 0 when none moves (the cone is then moot)
+    const bool dyn_active = P.lambda > 0.0;
+    double amin = M_PI;
+    bool any = false;
+    for (const auto &v : candidates(P))
+    {
+      if (v.norm() <= 1e-9 || !turnOk(P, v) || !staticOk(P, v) || (dyn_active && !dynamicOk(P, v)))
+        continue;
+      amin = std::min(amin, angleBetween(v, P.t_g));
+      any = true;
+    }
+    return any ? amin : 0.0;
   }
 
   LocalSolution LocalPlanner::solve(const LocalProblem &P) const
   {
+    if (sw_.fx.r1d_feasible_cone && !P.floor_set && sw_.enable_c3 && P.t_g.norm() > 1e-9)
+    {
+      LocalProblem Pf = P; // [fix R1d] widen the cone to the closest feasible moving candidate, then solve as usual
+      Pf.theta_floor = feasibleConeFloor(P);
+      Pf.floor_set = true;
+      return solve(Pf);
+    }
+    if (sw_.fx.s1_eps_constraint && P.lambda > 0.0)
+      return solveBudget(P); // [fix S1]
     const auto cand = candidates(P);
     const bool dyn_active = P.lambda > 0.0; // (C-s) dynamic part "active iff lambda > 0"
     LocalSolution best;
@@ -190,12 +248,13 @@ namespace jps_vo
     // [ENG-4] refinement: the exact-penalty optimum of the continuous problem lies on the cone surface when the cone
     // meets F; the sampled set may only hold points just outside it. Add the projection of the incumbent onto the
     // cone (same speed, rotated towards t_g by s_g) when it satisfies (38), and keep it if J~ improves.
-    for (int it = 0; found && it < 3 && best.s_g > 0.0; ++it)
+    // ang_excess == s_g bit for bit when R1a/R1b/R5 are off (frozen behaviour)
+    for (int it = 0; found && it < 3 && best.ang_excess > 0.0; ++it)
     {
       const Eigen::Vector3d axis = best.v.cross(P.t_g);
       Eigen::Vector3d vp;
       if (axis.norm() > 1e-12)
-        vp = Eigen::AngleAxisd(best.s_g, axis.normalized()) * best.v;
+        vp = Eigen::AngleAxisd(best.ang_excess, axis.normalized()) * best.v;
       else
         vp = best.v.norm() * P.t_g.normalized(); // antiparallel: rotate fully onto t_g
       if (!admissible(P, vp) && vp.norm() > 1e-12)
@@ -221,6 +280,68 @@ namespace jps_vo
     }
     if (!found)
       best = fallback(P, cand);
+    best.n_candidates = static_cast<int>(cand.size());
+    best.n_feasible = n_feas;
+    return best;
+  }
+
+  LocalSolution LocalPlanner::solveBudget(const LocalProblem &P) const
+  {
+    // [fix S1] epsilon-constraint form of P_loc: argmin of J~ without the weighted rho over the candidates whose risk
+    // stays within rho <= 1 - lambda; when no feasible candidate meets the budget, the frozen weighted sum decides.
+    const auto cand = candidates(P);
+    const bool dyn_active = P.lambda > 0.0;
+    const double budget = 1.0 - P.lambda;
+    std::vector<LocalSolution> feas;
+    for (const auto &v : cand)
+      if (turnOk(P, v) && staticOk(P, v) && (!dyn_active || dynamicOk(P, v)))
+        feas.push_back(evaluate(P, v));
+    bool any_budget = false;
+    for (const auto &s : feas)
+      any_budget = any_budget || s.rho <= budget + 1e-12;
+    auto obj = [&](const LocalSolution &s) { return any_budget ? s.J : s.J_ws; };
+    auto admit = [&](const LocalSolution &s) { return !any_budget || s.rho <= budget + 1e-12; };
+    LocalSolution best;
+    bool found = false;
+    int n_feas = static_cast<int>(feas.size());
+    for (const auto &s : feas)
+      if (admit(s) && (!found || obj(s) < obj(best) - 1e-12))
+      {
+        best = s;
+        found = true;
+      }
+    // [ENG-4] refinement onto the cone surface, with the same objective and admission rule
+    for (int it = 0; found && it < 3 && best.ang_excess > 0.0; ++it)
+    {
+      const Eigen::Vector3d axis = best.v.cross(P.t_g);
+      Eigen::Vector3d vp;
+      if (axis.norm() > 1e-12)
+        vp = Eigen::AngleAxisd(best.ang_excess, axis.normalized()) * best.v;
+      else
+        vp = best.v.norm() * P.t_g.normalized();
+      if (!admissible(P, vp) && vp.norm() > 1e-12)
+      {
+        const Eigen::Vector3d u = vp.normalized();
+        const double r = c_.a_max * c_.dt, b = u.dot(P.v_prev);
+        const double disc = b * b - P.v_prev.squaredNorm() + r * r;
+        if (disc < 0.0)
+          break;
+        const double lo = std::max(0.0, b - std::sqrt(disc)), hi = std::min(b + std::sqrt(disc), speedLimit(P));
+        if (hi < lo)
+          break;
+        vp = std::min(hi, std::max(lo, best.v.norm())) * u;
+      }
+      if (!admissible(P, vp) || !turnOk(P, vp) || !staticOk(P, vp) || (dyn_active && !dynamicOk(P, vp)))
+        break;
+      const LocalSolution s = evaluate(P, vp);
+      if (!admit(s) || obj(s) >= obj(best) - 1e-12)
+        break;
+      best = s;
+      ++n_feas;
+    }
+    if (!found)
+      best = fallback(P, cand);
+    best.budget_active = any_budget;
     best.n_candidates = static_cast<int>(cand.size());
     best.n_feasible = n_feas;
     return best;

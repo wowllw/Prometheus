@@ -26,6 +26,7 @@ OUT=${OUT:-$HOME/.ros/ablation}
 TAG=${TAG:-formal}
 RECORD=${RECORD:-0}                       # Q-B: no rosbag in the batch
 MAX_ATTEMPTS=${MAX_ATTEMPTS:-3}
+FIXES_FILE=${FIXES_FILE:-}                # engineering fixes preset (config/fixes/<name>.yaml); "" = thesis-frozen-v1
 SEEDS=${SEEDS:-$(seq -s ' ' 1 20)}
 VARIANTS=${VARIANTS:-"S1_east S2_north S3_climb_ne head_on crossing_90 M1_three_way"}
 GROUPS_SEL=${GROUPS_SEL:-"g1 g2 g3 g4 g5 g6"}
@@ -128,9 +129,10 @@ record: $RECORD
 driver: run_ablation_batch.sh
 driver_commit: '$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null)'
 EOF
+  [ -n "$FIXES_FILE" ] && meta_set fixes_file "$FIXES_FILE"
 
   # step 3: launch (B-4, B-5: GROUP is the only group-dependent variable)
-  (cd "$ROOT" && LOG_DIR=$LOG_DIR GROUP=$G PLANNER_MODE=coupled PRE_ROTATE=true RECORD=$RECORD REPLAN_PERIOD=1.0 \
+  (cd "$ROOT" && LOG_DIR=$LOG_DIR GROUP=$G FIXES_FILE=$FIXES_FILE PLANNER_MODE=coupled PRE_ROTATE=true RECORD=$RECORD REPLAN_PERIOD=1.0 \
      bash -ic "$START" >/dev/null 2>&1)
 
   # step 4: ready

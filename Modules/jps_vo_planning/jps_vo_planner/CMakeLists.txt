@@ -55,7 +55,7 @@ target_link_libraries(jps_vo_planner_node jps_vo_core ${catkin_LIBRARIES})
 add_dependencies(jps_vo_planner_node ${catkin_EXPORTED_TARGETS})
 
 # offline unit tests (no ROS master needed); run: devel/lib/jps_vo_planner/test_<name>
-foreach(t test_occupancy_grid test_jps test_vo test_coupling)
+foreach(t test_occupancy_grid test_jps test_vo test_coupling gen_golden test_fixes)
   add_executable(${t} test/${t}.cpp)
   target_link_libraries(${t} jps_vo_core)
   target_compile_definitions(${t} PRIVATE JPS_VO_PKG_DIR="${PROJECT_SOURCE_DIR}")

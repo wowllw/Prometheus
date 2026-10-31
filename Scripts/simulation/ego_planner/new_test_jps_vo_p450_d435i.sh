@@ -18,6 +18,8 @@ PLANNER_MODE=${PLANNER_MODE:-coupled}
 GROUP=${GROUP:-g6}
 REPLAN_PERIOD=${REPLAN_PERIOD:-1.0}
 PRE_ROTATE=${PRE_ROTATE:-true}
+FIXES_FILE=${FIXES_FILE:-}            # engineering fixes preset (config/fixes/<name>.yaml); "" = thesis-frozen-v1
+FIXES_ARG=""; [ -n "$FIXES_FILE" ] && FIXES_ARG=" fixes_file:=$FIXES_FILE"
 mkdir -p "$LOG_DIR"
 echo "logs -> $LOG_DIR"
 
@@ -25,7 +27,7 @@ gnome-terminal --window -e 'bash -c "roscore 2>&1 | tee '$LOG_DIR'/roscore.log; 
 --tab -e 'bash -c "sleep 3; roslaunch prometheus_gazebo sitl_p450_d435i.launch uav1_id:='$UAV_ID' uav1_init_x:=-0.0 uav1_init_y:=-0.0 2>&1 | tee '$LOG_DIR'/gazebo.log; exec bash"' \
 --tab -e 'bash -c "sleep 4; roslaunch prometheus_uav_control uav_control_main_outdoor.launch uav_id:='$UAV_ID' 2>&1 | tee '$LOG_DIR'/uav_control.log; exec bash"' \
 --tab -e 'bash -c "sleep 5; roslaunch prometheus_gazebo depth_to_octomap.launch uav_id:='$UAV_ID' 2>&1 | tee '$LOG_DIR'/octomap.log; exec bash"' \
---tab -e 'bash -c "sleep 6; stdbuf -oL -eL roslaunch jps_vo_planner sitl_jps_vo_planner.launch uav_id:='$UAV_ID' planner_mode:='$PLANNER_MODE' group:='$GROUP' log_dir:='$LOG_DIR' replan_period:='$REPLAN_PERIOD' pre_rotate_yaw:='$PRE_ROTATE' 2>&1 | python3 -u '$EXP'/ts_lines.py | tee '$LOG_DIR'/planner.log; exec bash"' \
+--tab -e 'bash -c "sleep 6; stdbuf -oL -eL roslaunch jps_vo_planner sitl_jps_vo_planner.launch uav_id:='$UAV_ID' planner_mode:='$PLANNER_MODE' group:='$GROUP' log_dir:='$LOG_DIR' replan_period:='$REPLAN_PERIOD' pre_rotate_yaw:='$PRE_ROTATE"$FIXES_ARG"' 2>&1 | python3 -u '$EXP'/ts_lines.py | tee '$LOG_DIR'/planner.log; exec bash"' \
 
 if [ "${RECORD:-0}" = "1" ]; then
   gnome-terminal --tab -e 'bash -c "sleep 8; cd '$LOG_DIR' && rosbag record -O run.bag '"$($EXP/bag_topics.sh)"' /uav1/jps_vo/path 2>&1 | tee '$LOG_DIR'/rosbag.log; exec bash"'

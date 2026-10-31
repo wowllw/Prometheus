@@ -86,6 +86,27 @@ namespace jps_vo
     return costToGo(p.s) + p.dist / L_s;
   }
 
+  double GlobalPath::costToGoNoKappa(double s) const
+  {
+    double c = 0.0;
+    for (size_t i = 0; i < edges.size(); ++i)
+    {
+      const auto &e = edges[i];
+      if (e.ell <= 0.0)
+        continue;
+      const double lo = std::max(s, cum_[i]), hi = cum_[i + 1];
+      if (hi > lo)
+        c += (hi - lo) * (e.w - e.kappa) / e.ell;
+    }
+    return c;
+  }
+
+  double GlobalPath::valueNoKappa(const Eigen::Vector3d &q, double L_s) const
+  {
+    const Projection p = project(q);
+    return costToGoNoKappa(p.s) + p.dist / L_s;
+  }
+
   Eigen::Vector3d GlobalPath::guideTangent(double s, double ell_w) const
   {
     if (edges.empty())
