@@ -36,6 +36,8 @@ namespace jps_vo
     free_mode_ = true;
     t_threat_ = -1e18;
     last_switch_t_ = -1e18;
+    r4_evidence_ = 0.0;
+    r4_evidence_t_ = -1e18;
   }
 
   bool PlannerCore::hasGoal() const
@@ -184,6 +186,7 @@ namespace jps_vo
     unsigned long epoch;
     double last_switch_t;
     bool free_now; // [fix R4-m] threat-free mode of the local layer when the search starts
+    double ev_prev, ev_t, ev_new = 0.0; // [fix R4-new] evidence before this search, its time, and after it
     {
       std::lock_guard<std::mutex> lk(mtx_);
       goal = goal_;
@@ -193,6 +196,8 @@ namespace jps_vo
       epoch = goal_epoch_;
       last_switch_t = last_switch_t_;
       free_now = free_mode_;
+      ev_prev = r4_evidence_;
+      ev_t = r4_evidence_t_;
     }
     Eigen::Vector3i s, g;
     if (!grid.nearestFree(p_ref, cfg_.snap_radius, s) || !grid.nearestFree(goal, cfg_.snap_radius, g))
@@ -282,9 +287,29 @@ namespace jps_vo
         // obstacle is never held back by the dwell
         const bool dwell_applies = !cfg_.sw.fx.r4m_dwell_free_only || free_now;
         sd.dwell_applied = dwell_applies ? 1 : 0;
-        keep_old = !sd.forced && !(sd.C_new <= sd.C_old - cfg_.c.eps_w && (!dwell_applies || sd.dwell_left <= 0.0));
+        bool cost_ok = sd.C_new <= sd.C_old - cfg_.c.eps_w;
+        if (cfg_.sw.fx.r4n_leaky_evidence)
+        {
+          // [fix R4-new] leaky CUSUM evidence that the alternative is better beyond the tolerance eps_w:
+          // E = max(0, exp(-(t - t_E) / T_g) E_prev + (C_old - C_new - eps_w)); a voluntary switch needs E >= eps_w
+          ev_new = std::max(0.0, std::exp(-std::max(0.0, t - ev_t) / cfg_.c.T_g) * ev_prev + (sd.C_old - sd.C_new - cfg_.c.eps_w));
+          cost_ok = ev_new >= cfg_.c.eps_w;
+        }
+        if (cfg_.sw.fx.r4s_safety_override)
+        {
+          // [fix R4-s] the old route is predicted to enter a safety sphere within tau2 (TTC <= tau2) and the new one
+          // keeps more clearance: the switch is forced past the evidence and the dwell
+          sd.d_old_pred = predictedClearance(rest, obs);
+          sd.d_new_pred = predictedClearance(np, obs);
+          sd.safety_override = (sd.d_old_pred < 0.0 && sd.d_new_pred > sd.d_old_pred) ? 1 : 0;
+        }
+        keep_old = !sd.forced && !sd.safety_override && !(cost_ok && (!dwell_applies || sd.dwell_left <= 0.0));
       }
     }
+    if (cfg_.sw.fx.r4n_leaky_evidence && !(cfg_.sw.fx.r4_switch_hysteresis && is_switch && !old.empty()))
+      ev_new = std::max(0.0, std::exp(-std::max(0.0, t - ev_t) / cfg_.c.T_g) * ev_prev - cfg_.c.eps_w); // [fix R4-new] no alternative: leak
+    if (cfg_.sw.fx.r4n_leaky_evidence)
+      sd.evidence = ev_new;
     if (cfg_.sw.fx.any())
     {
       if (old.empty() || reason == "goal" || reason == "map")
@@ -313,6 +338,8 @@ namespace jps_vo
       }
       cache_.swap(cache);
       events_.push_back(PathEvent{t, path_id_, path_.hash(), reason, false, path_.points()});
+      if (cfg_.sw.fx.r4n_leaky_evidence) // [fix R4-new] the evidence keeps accumulating while the old route is kept
+        r4_evidence_ = ev_new, r4_evidence_t_ = t;
       switch_diags_.push_back(sd);
       return true;
     }
@@ -325,6 +352,8 @@ namespace jps_vo
     events_.push_back(PathEvent{t, path_id_, np.hash(), reason, is_switch, np.points()});
     if (cfg_.sw.fx.r4_switch_hysteresis && is_switch)
       last_switch_t_ = t; // [fix R4]
+    if (cfg_.sw.fx.r4n_leaky_evidence) // [fix R4-new] an accepted switch consumes the evidence
+      r4_evidence_ = is_switch ? 0.0 : ev_new, r4_evidence_t_ = t;
     if (cfg_.sw.fx.any())
       switch_diags_.push_back(sd);
     return true;
@@ -411,6 +440,30 @@ namespace jps_vo
     if (!(up > eps || down > eps))
       return "none";
     return (up_nk > eps || down_nk > eps) ? "risk_Dk" : "kappa";
+  }
+
+  double PlannerCore::predictedClearance(const GlobalPath &route, const std::vector<ObstacleState> &obs) const
+  {
+    // [fix R4-s] closest approach per edge with the edge timing of eq. (39) (t_hat = arc / v_c) and the CPA of eq. (19)
+    // under constant obstacle velocity, truncated at the prediction window tau2 (the VO horizon)
+    const ModelConstants &c = cfg_.c;
+    double best = kInf, arc = 0.0;
+    for (const auto &e : route.edges)
+    {
+      const double t_rel = arc / c.v_c;
+      if (t_rel >= c.tau2 || obs.empty())
+        break;
+      Segment sg;
+      sg.q = e.a;
+      sg.d = e.t;
+      sg.ell = std::min(e.ell, (c.tau2 - t_rel) * c.v_c);
+      sg.t_rel = t_rel;
+      const SegmentRisk r = segmentRisk(sg, obs, c);
+      for (size_t i = 0; i < obs.size(); ++i)
+        best = std::min(best, r.d_cpa[i] - c.safetyRadius(obs[i].r));
+      arc += e.ell;
+    }
+    return best;
   }
 
   bool PlannerCore::remainingPathBlocked(const OccupancyGrid &grid, const GlobalPath &path, const Eigen::Vector3d &p_ref) const

@@ -242,9 +242,10 @@ namespace jps_vo
 
   bool Fixes::any() const
   {
-    return r1a_reachable_cone || r1b_continuous_slack || r1c_heading_memory || r1d_feasible_cone || r2a_kappa_decay ||
-           r2b_kappa_local_excluded || r3_relevant_trigger || r4_switch_hysteresis || r4m_dwell_free_only ||
-           r5_mode_gating ||
+    return r1a_reachable_cone || r1b_continuous_slack || r1c_heading_memory || r1d_feasible_cone || r1e_lowspeed_angle ||
+           r2a_kappa_decay ||
+           r2b_kappa_local_excluded || r3_relevant_trigger || r4_switch_hysteresis || r4m_dwell_free_only || r4n_leaky_evidence ||
+           r4s_safety_override || r5_mode_gating ||
            s1_eps_constraint || diag_log;
   }
 

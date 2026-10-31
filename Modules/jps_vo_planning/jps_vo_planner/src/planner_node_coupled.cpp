@@ -99,24 +99,28 @@ namespace jps_vo
     sw.fx.r1b_continuous_slack = param(nh, "fixes/r1b_continuous_slack", false);
     sw.fx.r1c_heading_memory = param(nh, "fixes/r1c_heading_memory", false);
     sw.fx.r1d_feasible_cone = param(nh, "fixes/r1d_feasible_cone", false);
+    sw.fx.r1e_lowspeed_angle = param(nh, "fixes/r1e_lowspeed_angle", false);
     sw.fx.r2a_kappa_decay = param(nh, "fixes/r2a_kappa_decay", false);
     sw.fx.r2b_kappa_local_excluded = param(nh, "fixes/r2b_kappa_local_excluded", false);
     sw.fx.r3_relevant_trigger = param(nh, "fixes/r3_relevant_trigger", false);
     sw.fx.r4_switch_hysteresis = param(nh, "fixes/r4_switch_hysteresis", false);
     sw.fx.r4m_dwell_free_only = param(nh, "fixes/r4m_dwell_free_only", false);
+    sw.fx.r4n_leaky_evidence = param(nh, "fixes/r4n_leaky_evidence", false);
+    sw.fx.r4s_safety_override = param(nh, "fixes/r4s_safety_override", false);
     sw.fx.r5_mode_gating = param(nh, "fixes/r5_mode_gating", false);
     sw.fx.s1_eps_constraint = param(nh, "fixes/s1_eps_constraint", false);
     sw.fx.diag_log = param(nh, "fixes/diag_log", false);
-    if (sw.fx.r1b_continuous_slack && !sw.fx.r1d_feasible_cone)
-      ROS_WARN("[jps_vo] fixes: r1b_continuous_slack without r1d_feasible_cone stalled at lambda = 0 in the offline "
-               "tests; enable r1d_feasible_cone with it");
+    if ((sw.fx.r1b_continuous_slack || sw.fx.r1e_lowspeed_angle) && !sw.fx.r1d_feasible_cone)
+      ROS_WARN("[jps_vo] fixes: r1b_continuous_slack / r1e_lowspeed_angle without r1d_feasible_cone can stall at "
+               "lambda = 0 (zero-width ray blocked); enable r1d_feasible_cone with it");
     if (sw.fx.any())
-      ROS_WARN("[jps_vo] fixes active, this is NOT the thesis-frozen-v1 behaviour: r1a %d r1b %d r1c %d r1d %d r2a %d r2b %d "
-               "r3 %d r4 %d r4m %d r5 %d s1 %d diag %d",
+      ROS_WARN("[jps_vo] fixes active, this is NOT the thesis-frozen-v1 behaviour: r1a %d r1b %d r1c %d r1d %d r1e %d r2a %d r2b %d "
+               "r3 %d r4 %d r4m %d r4n %d r4s %d r5 %d s1 %d diag %d",
                sw.fx.r1a_reachable_cone, sw.fx.r1b_continuous_slack, sw.fx.r1c_heading_memory, sw.fx.r1d_feasible_cone,
-               sw.fx.r2a_kappa_decay,
+               sw.fx.r1e_lowspeed_angle, sw.fx.r2a_kappa_decay,
                sw.fx.r2b_kappa_local_excluded, sw.fx.r3_relevant_trigger, sw.fx.r4_switch_hysteresis,
-               sw.fx.r4m_dwell_free_only, sw.fx.r5_mode_gating, sw.fx.s1_eps_constraint, sw.fx.diag_log);
+               sw.fx.r4m_dwell_free_only, sw.fx.r4n_leaky_evidence, sw.fx.r4s_safety_override, sw.fx.r5_mode_gating,
+               sw.fx.s1_eps_constraint, sw.fx.diag_log);
 
     const std::string tie = param<std::string>(nh, "jps/tie_rule", "strict");
     core_cfg_.tie_rule = tie == "literal" ? Jps3D::TieRule::Literal : Jps3D::TieRule::Strict;
@@ -500,7 +504,7 @@ namespace jps_vo
       cycles_ext_csv_ << "t,t_g_x,t_g_y,t_g_z,ang_vprev_tg_deg,reach_turn_deg,theta_eff_deg,ang_excess_deg,s_g_star,"
                          "J,J_A,J_B,Gamma,cone_term,rho_star,zero_is_opt,ray_feasible,free_mode,e_k,kappa_on_ek,"
                          "kappa_map_size,kappa_bound,budget_active,fallback_active\n";
-      switches_ext_csv_ << "t,reason,is_switch,accepted,forced,C_old,C_new,dwell_left,up,down,n_on,n_off,dwell_applied\n";
+      switches_ext_csv_ << "t,reason,is_switch,accepted,forced,C_old,C_new,dwell_left,up,down,n_on,n_off,dwell_applied,evidence,safety_override,d_old_pred,d_new_pred\n";
       ext_open_ = cycles_ext_csv_.good() && switches_ext_csv_.good();
     }
   }
@@ -512,7 +516,9 @@ namespace jps_vo
     for (const auto &d : diags)
       switches_ext_csv_ << tnum(d.t) << "," << d.reason << "," << d.is_switch << "," << d.accepted << "," << d.forced << ","
                         << num(d.C_old) << "," << num(d.C_new) << "," << num(d.dwell_left) << "," << num(d.up) << ","
-                        << num(d.down) << "," << d.n_on << "," << d.n_off << "," << d.dwell_applied << "\n";
+                        << num(d.down) << "," << d.n_on << "," << d.n_off << "," << d.dwell_applied << ","
+                        << num(d.evidence) << "," << d.safety_override << "," << num(d.d_old_pred) << "," << num(d.d_new_pred)
+                        << "\n";
     if (!diags.empty())
       switches_ext_csv_.flush();
   }
@@ -548,10 +554,12 @@ namespace jps_vo
     if (sw.fx.any()) // [fixes] written only when a flag is on, so the frozen meta file stays byte-identical
       f << "fixes: {r1a_reachable_cone: " << sw.fx.r1a_reachable_cone << ", r1b_continuous_slack: " << sw.fx.r1b_continuous_slack
         << ", r1c_heading_memory: " << sw.fx.r1c_heading_memory << ", r1d_feasible_cone: " << sw.fx.r1d_feasible_cone
+        << ", r1e_lowspeed_angle: " << sw.fx.r1e_lowspeed_angle
         << ", r2a_kappa_decay: " << sw.fx.r2a_kappa_decay
         << ", r2b_kappa_local_excluded: " << sw.fx.r2b_kappa_local_excluded
         << ", r3_relevant_trigger: " << sw.fx.r3_relevant_trigger << ", r4_switch_hysteresis: " << sw.fx.r4_switch_hysteresis
-        << ", r4m_dwell_free_only: " << sw.fx.r4m_dwell_free_only << ", r5_mode_gating: " << sw.fx.r5_mode_gating << ", s1_eps_constraint: " << sw.fx.s1_eps_constraint
+        << ", r4m_dwell_free_only: " << sw.fx.r4m_dwell_free_only << ", r4n_leaky_evidence: " << sw.fx.r4n_leaky_evidence
+        << ", r4s_safety_override: " << sw.fx.r4s_safety_override << ", r5_mode_gating: " << sw.fx.r5_mode_gating << ", s1_eps_constraint: " << sw.fx.s1_eps_constraint
         << ", diag_log: " << sw.fx.diag_log << "}\n";
   }
 

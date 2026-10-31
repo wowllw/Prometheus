@@ -119,7 +119,22 @@ def run_extras(log_dir, eps_w=0.05, v_min=0.1, window=2.5):
                 win = [d for (tt, d) in out['dyn_series'] if t <= tt <= t + window]
                 held.append({'t': t, 'margin': fnum(r['C_old']) - fnum(r['C_new']), 'win_min_dyn': min(win) if win else float('nan')})
     out['r4_held_under_threat'] = held
+    sw_rows = _csv(os.path.join(log_dir, 'switches_ext.csv'))
+    out['r4_overrides'] = sum(1 for r in sw_rows if r.get('safety_override') == '1')
+    out['r4_held'] = sum(1 for r in sw_rows if r['is_switch'] == '1' and r['accepted'] == '0' and r['forced'] == '0')
+    # narrow-gap passage (V1 protocol): reference inside y in GAP_Y on the route to the goal
+    gap = [r for r in cyc if GAP_Y[0] <= fnum(r['p_ref_y']) <= GAP_Y[1]]
+    if gap:
+        sp = sorted(math.sqrt(sum(fnum(r['v_ref_' + a]) ** 2 for a in 'xyz')) for r in gap)
+        out['gap_time'] = fnum(gap[-1]['t']) - fnum(gap[0]['t'])
+        out['gap_median_speed'] = sp[len(sp) // 2]
+        out['gap_low_share'] = sum(s < v_min for s in sp) / len(sp)
+    else:
+        out['gap_time'] = out['gap_median_speed'] = out['gap_low_share'] = float('nan')
     return out
+
+
+GAP_Y = (0.7, 3.2)  # the narrow gap on the M1_three_way route where iteration 1 showed the low-speed phases
 
 
 def run_timeline(log_dir, top=4):

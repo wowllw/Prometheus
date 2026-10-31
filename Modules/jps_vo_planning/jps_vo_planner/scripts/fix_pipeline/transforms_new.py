@@ -7,17 +7,20 @@ import re
 from fixlib import rep, write_file, GateFailure
 
 # ordered repair units; every preset is a union of units (+ diag_log)
+# Iteration 2: FX1 uses R1e (R1b stays a flag for comparison, in no preset); FX4 is R4-new = R4 + leaky evidence +
+# safety override (+ R4-m in every preset that contains FX4); FX5 and FX6 are implemented but outside the V1/V2 ladder
 UNITS = {
-    'FX1': ['r1a_reachable_cone', 'r1b_continuous_slack', 'r1c_heading_memory', 'r1d_feasible_cone'],
+    'FX1': ['r1a_reachable_cone', 'r1c_heading_memory', 'r1d_feasible_cone', 'r1e_lowspeed_angle'],
     'FX2': ['r2a_kappa_decay', 'r2b_kappa_local_excluded'],
     'FX3': ['r3_relevant_trigger'],
-    'FX4': ['r4_switch_hysteresis'],
+    'FX4': ['r4_switch_hysteresis', 'r4n_leaky_evidence', 'r4s_safety_override'],
     'FX5': ['r5_mode_gating'],
     'FX6': ['s1_eps_constraint'],
 }
-ALL_FLAGS = [f for u in UNITS.values() for f in u] + ['r4m_dwell_free_only', 'diag_log']
-LADDER = [('diag_only', []), ('v1_r1', ['FX1']), ('v1_r2', ['FX1', 'FX2']), ('v1_r3', ['FX1', 'FX2', 'FX3']),
-          ('v1_r4', ['FX1', 'FX2', 'FX3', 'FX4']), ('v1_r5', ['FX1', 'FX2', 'FX3', 'FX4', 'FX5'])]
+ALL_FLAGS = [f for u in UNITS.values() for f in u] + ['r1b_continuous_slack', 'r4m_dwell_free_only', 'diag_log']
+# (name, units, r4m)
+LADDER = [('diag_only', [], False), ('v1_r1_e', ['FX1'], False), ('v1_r2_e', ['FX1', 'FX2'], False),
+          ('v1_r3_e', ['FX1', 'FX2', 'FX3'], False), ('v1_r4_new', ['FX1', 'FX2', 'FX3', 'FX4'], True)]
 
 
 def flags_of(units, r4m=False, diag=True):
@@ -44,10 +47,11 @@ def write_preset(R, name, flags, note):
 def default_presets():
     P = {'all_off': (flags_of([], diag=False), 'every flag false (identical to thesis-frozen-v1)'),
          'diag_only': (flags_of([]), 'extended diagnostics only, no behavioural change')}
-    for name, units in LADDER[1:]:
-        P[name] = (flags_of(units), 'V1 ladder step: %s' % '+'.join(units))
-    P['all_on'] = (flags_of(['FX1', 'FX2', 'FX3', 'FX4', 'FX5']), 'all high-priority repairs FX1-FX5 (FX6/S1 is evaluated separately)')
-    P['s1_only'] = (flags_of(['FX6']), 'FX6 epsilon-constraint only')
+    for name, units, r4m in LADDER[1:]:
+        P[name] = (flags_of(units, r4m=bool(r4m)), 'V1 ladder step: %s%s' % ('+'.join(units), ' with R4-m' if r4m else ''))
+    P['all_on'] = (flags_of(['FX1', 'FX2', 'FX3', 'FX4'], r4m=True), 'V2 repair set: FX1 (R1e) + FX2 + FX3 + FX4 (R4-new with R4-m)')
+    P['r5_only'] = (flags_of(['FX5']), 'FX5 threat-free gating only (implemented, outside the V1/V2 ladder)')
+    P['s1_only'] = (flags_of(['FX6']), 'FX6 epsilon-constraint only (implemented, outside the V1/V2 ladder)')
     return P
 
 
@@ -122,13 +126,195 @@ def r4m_dwell_waiver(R):
         raise GateFailure('Gate-1 edit', 'node invariant check not found after the R2a edit')
 
 
+def r1e_lowspeed_angle(R):
+    """Iteration 2 (after V1 iteration 1): the cone slack keeps the frozen angle penalty at |v| >= v_min and fades it in
+    linearly below v_min, where the model treats the heading as undefined. R1b (speed-proportional distance slack)
+    made heading deviation nearly free at low speed and produced a low-speed trap in narrow gaps in V1."""
+    rep(R['switches_h'], '''    bool r1d_feasible_cone = false;        // R1d cone never narrower than the closest feasible moving candidate
+''', '''    bool r1d_feasible_cone = false;        // R1d cone never narrower than the closest feasible moving candidate
+    bool r1e_lowspeed_angle = false;       // R1e cone slack = min(1, |v| / v_min) * angle excess (replaces R1b)
+''')
+    rep(R['coupling_cpp'], '''r1d_feasible_cone || r2a_kappa_decay ||''', '''r1d_feasible_cone || r1e_lowspeed_angle ||
+           r2a_kappa_decay ||''')
+    C = R['local_planner_cpp']
+    rep(C, '''      if (!(sw_.fx.r1a_reachable_cone || sw_.fx.r1b_continuous_slack || sw_.fx.r1d_feasible_cone || sw_.fx.r5_mode_gating))''',
+        '''      if (!(sw_.fx.r1a_reachable_cone || sw_.fx.r1b_continuous_slack || sw_.fx.r1d_feasible_cone || sw_.fx.r5_mode_gating ||
+            sw_.fx.r1e_lowspeed_angle))''')
+    rep(C, '''        s.s_g = sw_.fx.r1b_continuous_slack ? coneSlack(v, P.t_g, s.theta_eff, c_) : s.ang_excess;''',
+        '''        if (sw_.fx.r1b_continuous_slack)
+          s.s_g = coneSlack(v, P.t_g, s.theta_eff, c_);
+        else if (sw_.fx.r1e_lowspeed_angle) // [fix R1e] the heading penalty fades in below v_min, where heading is undefined
+          s.s_g = std::min(1.0, v.norm() / c_.v_min) * s.ang_excess;
+        else
+          s.s_g = s.ang_excess;''')
+    N = R['node_cpp']
+    rep(N, '''    sw.fx.r1d_feasible_cone = param(nh, "fixes/r1d_feasible_cone", false);
+''', '''    sw.fx.r1d_feasible_cone = param(nh, "fixes/r1d_feasible_cone", false);
+    sw.fx.r1e_lowspeed_angle = param(nh, "fixes/r1e_lowspeed_angle", false);
+''')
+    rep(N, '''    if (sw.fx.r1b_continuous_slack && !sw.fx.r1d_feasible_cone)
+      ROS_WARN("[jps_vo] fixes: r1b_continuous_slack without r1d_feasible_cone stalled at lambda = 0 in the offline "
+               "tests; enable r1d_feasible_cone with it");''', '''    if ((sw.fx.r1b_continuous_slack || sw.fx.r1e_lowspeed_angle) && !sw.fx.r1d_feasible_cone)
+      ROS_WARN("[jps_vo] fixes: r1b_continuous_slack / r1e_lowspeed_angle without r1d_feasible_cone can stall at "
+               "lambda = 0 (zero-width ray blocked); enable r1d_feasible_cone with it");''')
+    rep(N, '''r1d %d r2a %d r2b %d "''', '''r1d %d r1e %d r2a %d r2b %d "''')
+    rep(N, '''sw.fx.r1d_feasible_cone,
+               sw.fx.r2a_kappa_decay,''', '''sw.fx.r1d_feasible_cone,
+               sw.fx.r1e_lowspeed_angle, sw.fx.r2a_kappa_decay,''')
+    rep(N, '''<< ", r1d_feasible_cone: " << sw.fx.r1d_feasible_cone''',
+        '''<< ", r1d_feasible_cone: " << sw.fx.r1d_feasible_cone
+        << ", r1e_lowspeed_angle: " << sw.fx.r1e_lowspeed_angle''')
+
+
+def r4n_evidence_override(R):
+    """Iteration 2: R4-new = leaky CUSUM evidence for voluntary switches (r4n) + TTC / predicted-distance safety
+    override (r4s). The iteration-1 R4 rule and R4-m stay as they are."""
+    rep(R['switches_h'], '''    bool r4m_dwell_free_only = false;      // R4-m the R4 dwell applies only in threat-free mode; the eps_w margin always
+''', '''    bool r4m_dwell_free_only = false;      // R4-m the R4 dwell applies only in threat-free mode; the eps_w margin always
+    bool r4n_leaky_evidence = false;       // R4-new switch on leaky CUSUM evidence E = max(0, g E + dC - eps_w) >= eps_w
+    bool r4s_safety_override = false;      // R4-s force the switch when the old route is predicted to enter a safety sphere
+''')
+    rep(R['coupling_cpp'], '''r4m_dwell_free_only ||
+           r5_mode_gating ||''', '''r4m_dwell_free_only || r4n_leaky_evidence ||
+           r4s_safety_override || r5_mode_gating ||''')
+    H = R['core_h']
+    rep(H, '''    double up = 0.0, down = 0.0; // R3 sums of the last trigger evaluation
+    int n_on = 0, n_off = 0;
+''', '''    double up = 0.0, down = 0.0; // R3 sums of the last trigger evaluation
+    int n_on = 0, n_off = 0;
+    double evidence = 0.0, d_old_pred = 0.0, d_new_pred = 0.0; // R4-new evidence, R4-s predicted clearances
+    int safety_override = 0;
+''')
+    rep(H, '''    // [fix R3] trigger restricted to the remaining path''', '''    // [fix R4-s] rolling-window prediction: smallest predicted surface clearance min_o (d_cpa - R_o) while the UAV
+    // follows `route` from its start at v_c (t_hat = arc / v_c) for at most tau2 and every obstacle keeps its velocity
+    double predictedClearance(const GlobalPath &route, const std::vector<ObstacleState> &obs) const;
+    // [fix R3] trigger restricted to the remaining path''')
+    rep(H, '''    double last_switch_t_ = -1e18;                     // R4: time of the last accepted geometric switch (mtx_)
+''', '''    double last_switch_t_ = -1e18;                     // R4: time of the last accepted geometric switch (mtx_)
+    double r4_evidence_ = 0.0, r4_evidence_t_ = -1e18; // R4-new: leaky CUSUM evidence and its update time (mtx_)
+''')
+    C = R['core_cpp']
+    rep(C, '''    last_switch_t_ = -1e18;
+  }''', '''    last_switch_t_ = -1e18;
+    r4_evidence_ = 0.0;
+    r4_evidence_t_ = -1e18;
+  }''')
+    rep(C, '''    bool free_now; // [fix R4-m] threat-free mode of the local layer when the search starts
+''', '''    bool free_now; // [fix R4-m] threat-free mode of the local layer when the search starts
+    double ev_prev, ev_t, ev_new = 0.0; // [fix R4-new] evidence before this search, its time, and after it
+''')
+    rep(C, '''      free_now = free_mode_;
+''', '''      free_now = free_mode_;
+      ev_prev = r4_evidence_;
+      ev_t = r4_evidence_t_;
+''')
+    rep(C, '''        keep_old = !sd.forced && !(sd.C_new <= sd.C_old - cfg_.c.eps_w && (!dwell_applies || sd.dwell_left <= 0.0));
+      }
+    }
+''', '''        bool cost_ok = sd.C_new <= sd.C_old - cfg_.c.eps_w;
+        if (cfg_.sw.fx.r4n_leaky_evidence)
+        {
+          // [fix R4-new] leaky CUSUM evidence that the alternative is better beyond the tolerance eps_w:
+          // E = max(0, exp(-(t - t_E) / T_g) E_prev + (C_old - C_new - eps_w)); a voluntary switch needs E >= eps_w
+          ev_new = std::max(0.0, std::exp(-std::max(0.0, t - ev_t) / cfg_.c.T_g) * ev_prev + (sd.C_old - sd.C_new - cfg_.c.eps_w));
+          cost_ok = ev_new >= cfg_.c.eps_w;
+        }
+        if (cfg_.sw.fx.r4s_safety_override)
+        {
+          // [fix R4-s] the old route is predicted to enter a safety sphere within tau2 (TTC <= tau2) and the new one
+          // keeps more clearance: the switch is forced past the evidence and the dwell
+          sd.d_old_pred = predictedClearance(rest, obs);
+          sd.d_new_pred = predictedClearance(np, obs);
+          sd.safety_override = (sd.d_old_pred < 0.0 && sd.d_new_pred > sd.d_old_pred) ? 1 : 0;
+        }
+        keep_old = !sd.forced && !sd.safety_override && !(cost_ok && (!dwell_applies || sd.dwell_left <= 0.0));
+      }
+    }
+    if (cfg_.sw.fx.r4n_leaky_evidence && !(cfg_.sw.fx.r4_switch_hysteresis && is_switch && !old.empty()))
+      ev_new = std::max(0.0, std::exp(-std::max(0.0, t - ev_t) / cfg_.c.T_g) * ev_prev - cfg_.c.eps_w); // [fix R4-new] no alternative: leak
+    if (cfg_.sw.fx.r4n_leaky_evidence)
+      sd.evidence = ev_new;
+''')
+    rep(C, '''      switch_diags_.push_back(sd);
+      return true;
+    }''', '''      if (cfg_.sw.fx.r4n_leaky_evidence) // [fix R4-new] the evidence keeps accumulating while the old route is kept
+        r4_evidence_ = ev_new, r4_evidence_t_ = t;
+      switch_diags_.push_back(sd);
+      return true;
+    }''')
+    rep(C, '''    if (cfg_.sw.fx.r4_switch_hysteresis && is_switch)
+      last_switch_t_ = t; // [fix R4]
+''', '''    if (cfg_.sw.fx.r4_switch_hysteresis && is_switch)
+      last_switch_t_ = t; // [fix R4]
+    if (cfg_.sw.fx.r4n_leaky_evidence) // [fix R4-new] an accepted switch consumes the evidence
+      r4_evidence_ = is_switch ? 0.0 : ev_new, r4_evidence_t_ = t;
+''')
+    rep(C, '''  bool PlannerCore::remainingPathBlocked(''', '''  double PlannerCore::predictedClearance(const GlobalPath &route, const std::vector<ObstacleState> &obs) const
+  {
+    // [fix R4-s] closest approach per edge with the edge timing of eq. (39) (t_hat = arc / v_c) and the CPA of eq. (19)
+    // under constant obstacle velocity, truncated at the prediction window tau2 (the VO horizon)
+    const ModelConstants &c = cfg_.c;
+    double best = kInf, arc = 0.0;
+    for (const auto &e : route.edges)
+    {
+      const double t_rel = arc / c.v_c;
+      if (t_rel >= c.tau2 || obs.empty())
+        break;
+      Segment sg;
+      sg.q = e.a;
+      sg.d = e.t;
+      sg.ell = std::min(e.ell, (c.tau2 - t_rel) * c.v_c);
+      sg.t_rel = t_rel;
+      const SegmentRisk r = segmentRisk(sg, obs, c);
+      for (size_t i = 0; i < obs.size(); ++i)
+        best = std::min(best, r.d_cpa[i] - c.safetyRadius(obs[i].r));
+      arc += e.ell;
+    }
+    return best;
+  }
+
+  bool PlannerCore::remainingPathBlocked(''')
+    N = R['node_cpp']
+    rep(N, '''    sw.fx.r4m_dwell_free_only = param(nh, "fixes/r4m_dwell_free_only", false);
+''', '''    sw.fx.r4m_dwell_free_only = param(nh, "fixes/r4m_dwell_free_only", false);
+    sw.fx.r4n_leaky_evidence = param(nh, "fixes/r4n_leaky_evidence", false);
+    sw.fx.r4s_safety_override = param(nh, "fixes/r4s_safety_override", false);
+''')
+    rep(N, '''"r3 %d r4 %d r4m %d r5 %d s1 %d diag %d",''', '''"r3 %d r4 %d r4m %d r4n %d r4s %d r5 %d s1 %d diag %d",''')
+    rep(N, '''sw.fx.r4m_dwell_free_only, sw.fx.r5_mode_gating, sw.fx.s1_eps_constraint, sw.fx.diag_log);''',
+        '''sw.fx.r4m_dwell_free_only, sw.fx.r4n_leaky_evidence, sw.fx.r4s_safety_override, sw.fx.r5_mode_gating,
+               sw.fx.s1_eps_constraint, sw.fx.diag_log);''')
+    rep(N, '''<< ", r4m_dwell_free_only: " << sw.fx.r4m_dwell_free_only << ", r5_mode_gating: "''',
+        '''<< ", r4m_dwell_free_only: " << sw.fx.r4m_dwell_free_only << ", r4n_leaky_evidence: " << sw.fx.r4n_leaky_evidence
+        << ", r4s_safety_override: " << sw.fx.r4s_safety_override << ", r5_mode_gating: "''')
+    rep(N, '''n_on,n_off,dwell_applied\\n"''', '''n_on,n_off,dwell_applied,evidence,safety_override,d_old_pred,d_new_pred\\n"''')
+    rep(N, '''<< d.n_off << "," << d.dwell_applied << "\\n";''',
+        '''<< d.n_off << "," << d.dwell_applied << ","
+                        << num(d.evidence) << "," << d.safety_override << "," << num(d.d_old_pred) << "," << num(d.d_new_pred)
+                        << "\\n";''')
+
+
 # ---------------------------------------------------------------- CMake: register the new offline tests
 def cmake_tests(R, new_tests):
     s = open(R['cmake']).read()
     m = re.search(r'foreach\(\s*t\s+([^)]*)\)', s)
     names = m.group(1).split()
     add = [t for t in new_tests if t not in names]
-    rep(R['cmake'], m.group(0), 'foreach(t %s)' % ' '.join(names + add))
+    if add:
+        rep(R['cmake'], m.group(0), 'foreach(t %s)' % ' '.join(names + add))
+
+
+def layers():
+    """Ordered edit layers: (name, role whose content shows the layer is present, marker regex, apply function)."""
+    import transforms_base as TB
+    return [
+        ('base FX1-FX6 (iteration 1)', 'switches_h', r'\bstruct\s+Fixes\b', lambda R: [s(R) for s in TB.BASE_STEPS]),
+        ('R3 positive part + R4-m (iteration 1)', 'switches_h', r'r4m_dwell_free_only',
+         lambda R: (r3_positive_part(R), r4m_dwell_waiver(R))),
+        ('R1e low-speed angle penalty (iteration 2)', 'switches_h', r'r1e_lowspeed_angle', r1e_lowspeed_angle),
+        ('R4-new leaky evidence + safety override (iteration 2)', 'switches_h', r'r4n_leaky_evidence', r4n_evidence_override),
+        ('experiment drivers: fixes preset pass-through', 'batch_script', r'FIXES_FILE', lambda R: (start_script(R), batch_script(R))),
+    ]
 
 
 # ---------------------------------------------------------------- experiment drivers: fixes preset pass-through

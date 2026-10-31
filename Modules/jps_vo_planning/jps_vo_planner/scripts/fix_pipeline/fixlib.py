@@ -122,4 +122,15 @@ def fail_report(exc, stage):
         if data:
             f.write('\n## Data\n\n```json\n%s\n```\n' % json.dumps(data, indent=2, default=str))
     log('GATE FAILURE at %s: %s -> %s' % (stage, exc, path))
+    # archive the iteration state as it was at the stop (no retry, no repair)
+    import shutil
+    arch = os.path.join(PIPE_DIR, 'archive', os.path.splitext(os.path.basename(path))[0])
+    os.makedirs(arch, exist_ok=True)
+    for fn in ('state.json', 'pipeline.log', os.path.basename(path)):
+        if os.path.isfile(os.path.join(PIPE_DIR, fn)):
+            shutil.copy2(os.path.join(PIPE_DIR, fn), arch)
+    st = load_json('state.json', {})
+    st['iteration_status'] = 'stopped at %s (%s); archived in %s' % (stage, getattr(exc, 'gate', ''), arch)
+    save_json('state.json', st)
+    log('iteration state archived -> %s' % arch)
     sys.exit(2)

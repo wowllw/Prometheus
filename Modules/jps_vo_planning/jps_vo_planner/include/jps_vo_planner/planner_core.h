@@ -84,6 +84,8 @@ namespace jps_vo
     double C_old = 0.0, C_new = 0.0, dwell_left = 0.0;
     double up = 0.0, down = 0.0; // R3 sums of the last trigger evaluation
     int n_on = 0, n_off = 0;
+    double evidence = 0.0, d_old_pred = 0.0, d_new_pred = 0.0; // R4-new evidence, R4-s predicted clearances
+    int safety_override = 0;
   };
 
   struct GlobalStepResult
@@ -142,6 +144,9 @@ namespace jps_vo
                              const std::vector<ObstacleState> &obs) const;
     bool dirDependentWeights() const;
     LocalProblem lastLocalProblem() const;
+    // [fix R4-s] rolling-window prediction: smallest predicted surface clearance min_o (d_cpa - R_o) while the UAV
+    // follows `route` from its start at v_c (t_hat = arc / v_c) for at most tau2 and every obstacle keeps its velocity
+    double predictedClearance(const GlobalPath &route, const std::vector<ObstacleState> &obs) const;
     // [fix R3] trigger restricted to the remaining path (increase) and the off-path cached edges (decrease):
     // "none", "risk_Dk" or "kappa"
     std::string changedEdgesRelevant(const OccupancyGrid &grid, const GlobalPath &path, const Eigen::Vector3d &p_ref,
@@ -186,6 +191,7 @@ namespace jps_vo
     bool free_mode_ = true;                            // R5 (mtx_)
     double t_threat_ = -1e18;                          // R5: last time with lambda > 0 (mtx_)
     double last_switch_t_ = -1e18;                     // R4: time of the last accepted geometric switch (mtx_)
+    double r4_evidence_ = 0.0, r4_evidence_t_ = -1e18; // R4-new: leaky CUSUM evidence and its update time (mtx_)
     std::vector<SwitchDiag> switch_diags_;             // (mtx_)
     struct TriggerDiag
     {

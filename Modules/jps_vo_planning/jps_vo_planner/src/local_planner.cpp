@@ -168,7 +168,8 @@ namespace jps_vo
     // (28): minimal slack, s_g = max(0, angle(v, t_g) - theta_c)
     if (sw_.enable_c3 && P.t_g.norm() > 1e-9 && v.norm() > 1e-12)
     {
-      if (!(sw_.fx.r1a_reachable_cone || sw_.fx.r1b_continuous_slack || sw_.fx.r1d_feasible_cone || sw_.fx.r5_mode_gating))
+      if (!(sw_.fx.r1a_reachable_cone || sw_.fx.r1b_continuous_slack || sw_.fx.r1d_feasible_cone || sw_.fx.r5_mode_gating ||
+            sw_.fx.r1e_lowspeed_angle))
       {
         s.s_g = std::max(0.0, angleBetween(v, P.t_g) - thetaC(lam, sw_));
         s.ang_excess = s.s_g;
@@ -178,7 +179,12 @@ namespace jps_vo
         // [fix R1a/R5] cone half-angle; [fix R1b] slack = distance to the cone in velocity space / v_c
         s.theta_eff = coneTheta(P, lam);
         s.ang_excess = std::max(0.0, angleBetween(v, P.t_g) - s.theta_eff);
-        s.s_g = sw_.fx.r1b_continuous_slack ? coneSlack(v, P.t_g, s.theta_eff, c_) : s.ang_excess;
+        if (sw_.fx.r1b_continuous_slack)
+          s.s_g = coneSlack(v, P.t_g, s.theta_eff, c_);
+        else if (sw_.fx.r1e_lowspeed_angle) // [fix R1e] the heading penalty fades in below v_min, where heading is undefined
+          s.s_g = std::min(1.0, v.norm() / c_.v_min) * s.ang_excess;
+        else
+          s.s_g = s.ang_excess;
       }
     }
 

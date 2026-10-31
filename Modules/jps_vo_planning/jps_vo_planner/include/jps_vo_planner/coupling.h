@@ -48,11 +48,14 @@ namespace jps_vo
     bool r1b_continuous_slack = false;     // R1b cone slack = dist(v, K) / v_c, continuous at v = 0
     bool r1c_heading_memory = false;       // R1c Gamma turn term measured against the last heading when |v_prev| < v_min
     bool r1d_feasible_cone = false;        // R1d cone never narrower than the closest feasible moving candidate
+    bool r1e_lowspeed_angle = false;       // R1e cone slack = min(1, |v| / v_min) * angle excess (replaces R1b)
     bool r2a_kappa_decay = false;          // R2a kappa peak-hold with exp(-dt / T_g) release instead of a per-cycle clear
     bool r2b_kappa_local_excluded = false; // R2b J_A = V_Pi computed without kappa
     bool r3_relevant_trigger = false;      // R3 replan on remaining-path increase / off-path decrease > eps_w only
     bool r4_switch_hysteresis = false;     // R4 geometric switch only if cheaper by eps_w and T_g after the last switch
     bool r4m_dwell_free_only = false;      // R4-m the R4 dwell applies only in threat-free mode; the eps_w margin always
+    bool r4n_leaky_evidence = false;       // R4-new switch on leaky CUSUM evidence E = max(0, g E + dC - eps_w) >= eps_w
+    bool r4s_safety_override = false;      // R4-s force the switch when the old route is predicted to enter a safety sphere
     bool r5_mode_gating = false;           // R5 cone base width atan(e_cut / ell_W) while threat-free for >= T_c
     bool s1_eps_constraint = false;        // S1 risk budget rho <= 1 - lambda instead of the weighted rho term
     bool diag_log = false;                 // extended diagnostics only (cycles_ext.csv, switches_ext.csv)

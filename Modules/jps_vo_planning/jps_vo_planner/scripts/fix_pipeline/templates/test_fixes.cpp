@@ -181,6 +181,45 @@ int main(int argc, char **argv)
     check(exact_ok, "T2 R1b: slack == brute-force distance to K / v_c (720 generators; worst " + g3(worst_exact) + ")");
   }
 
+  // ---- T2e R1e slack: zero at v = 0, continuous, equal to the frozen angle excess for |v| >= v_min, non-decreasing in
+  //      speed along a fixed direction ----
+  {
+    const OccupancyGrid open = openGrid(c.rInfl());
+    Switches sw_e, sw_f;
+    sw_e.fx.r1e_lowspeed_angle = true;
+    const LocalPlanner lp_e(c, sw_e), lp_f(c, sw_f);
+    bool zero_ok = true, cont_ok = true, equal_ok = true, mono_ok = true;
+    for (int k = 0; k < 4000; ++k)
+    {
+      LocalProblem P;
+      P.p_ref = Eigen::Vector3d(0, 0, 1.5);
+      P.goal = Eigen::Vector3d(10, 0, 1.5);
+      P.t_g = unit3();
+      P.lambda = (k % 2) ? 0.0 : U01(rng);
+      P.L_s = 10.0;
+      P.grid = &open;
+      const Eigen::Vector3d u = unit3();
+      zero_ok = zero_ok && lp_e.evaluate(P, Eigen::Vector3d::Zero()).s_g == 0.0;
+      const double excess = std::max(0.0, angleBetween(u, P.t_g) - thetaC(P.lambda, sw_e));
+      for (double e = 1e-1; e >= 1e-9; e *= 0.1)
+        cont_ok = cont_ok && lp_e.evaluate(P, e * u).s_g <= e / c.v_min * M_PI + 1e-15;
+      for (double s : {c.v_min, 0.3, c.v_c})
+        equal_ok = equal_ok && std::fabs(lp_e.evaluate(P, s * u).s_g - lp_f.evaluate(P, s * u).s_g) <= 1e-12 &&
+                   std::fabs(lp_e.evaluate(P, s * u).s_g - excess) <= 1e-9;
+      double last = -1.0;
+      for (double s = 0.0; s <= c.v_c + 1e-12; s += 0.01)
+      {
+        const double sg = lp_e.evaluate(P, s * u).s_g;
+        mono_ok = mono_ok && sg >= last - 1e-12;
+        last = sg;
+      }
+    }
+    check(zero_ok, "T2e R1e: slack(0) == 0");
+    check(cont_ok, "T2e R1e: slack(e u) <= (e / v_min) pi for e = 1e-1 ... 1e-9 (no jump at v = 0)");
+    check(equal_ok, "T2e R1e: slack == frozen angle excess for |v| >= v_min (4000 random problems)");
+    check(mono_ok, "T2e R1e: slack non-decreasing in speed along a fixed direction");
+  }
+
   // ---- T3 lambda = 0 steady state: R1a + R1b keep the frozen ray solution of section 4.2(a)? (reported honestly) ----
   {
     const OccupancyGrid open = openGrid(c.rInfl());
@@ -451,6 +490,124 @@ int main(int argc, char **argv)
                                              std::to_string(fired) + "/" + std::to_string(n_inc) + ")");
   }
 
+  // ---- T11 R4-new: rolling-window predicted clearance, leaky CUSUM evidence, safety override ----
+  {
+    const OccupancyGrid g = pillarGrid(c.rInfl(), 6.0, 0.0, 0.8);
+    const Eigen::Vector3d p0(0, 0, 1.5), goal(12, 0, 1.5);
+    // (a) predictedClearance == brute-force rolling-window prediction (UAV at v_c along the route, constant-velocity obstacle)
+    {
+      PlannerCore core;
+      core.configure(cfgFor(6, [](Fixes &) {}));
+      core.setGoal(goal, p0);
+      core.replanGlobal(0.0, g, p0, Eigen::Vector3d::Zero(), {}, "goal");
+      const GlobalPath route = core.path();
+      double worst = 0.0;
+      for (int k = 0; k < 200; ++k)
+      {
+        const std::vector<ObstacleState> obs = {
+            obstacle("o", Eigen::Vector3d(12.0 * U01(rng), 4.0 * U(rng), 1.5), Eigen::Vector3d(U(rng), U(rng), 0) * 0.6)};
+        double best = kInf, arc = 0.0;
+        for (const auto &e : route.edges)
+        {
+          for (double s = 0.0; s <= e.ell + 1e-12; s += 0.002)
+          {
+            const double t = (arc + s) / c.v_c;
+            if (t > c.tau2)
+              break;
+            best = std::min(best, (e.a + e.t * s - (obs[0].p + obs[0].v * t)).norm() - c.safetyRadius(obs[0].r));
+          }
+          arc += e.ell;
+        }
+        worst = std::max(worst, std::fabs(best - core.predictedClearance(route, obs)));
+      }
+      check(worst < 0.01, "T11 R4-s: predicted clearance == brute-force rolling-window prediction (worst |diff| " + g3(worst) +
+                              " m, 200 cases)");
+    }
+    // (b) CUSUM recursion and acceptance rule, (c) A-B-A suppression: risk source alternating sides every 0.5 s
+    {
+      int changes[3] = {0, 0, 0};
+      bool rec_ok = true, accept_ok = true;
+      double worst = 0.0;
+      for (int m = 0; m < 3; ++m) // 0: no R4, 1: R4 iteration 1, 2: R4-new (evidence, R4-m, override)
+      {
+        PlannerCore core;
+        core.configure(cfgFor(6, [&](Fixes &f) {
+          f.diag_log = true;
+          f.r4_switch_hysteresis = m >= 1;
+          f.r4n_leaky_evidence = f.r4m_dwell_free_only = f.r4s_safety_override = m == 2;
+        }));
+        core.setGoal(goal, p0);
+        double last_side = 0.0;
+        for (int k = 0; k < 200; ++k)
+        {
+          const double side = (k % 2 == 0) ? 1.0 : -1.0;
+          core.replanGlobal(0.5 * k, g, p0, Eigen::Vector3d::Zero(), {obstacle("s", Eigen::Vector3d(6.0, side * 2.2, 1.5), {0, 0, 0})},
+                            k == 0 ? "goal" : "periodic");
+          const double s = sideOf(core.path());
+          if (k > 0 && s * last_side < 0.0)
+            ++changes[m];
+          last_side = s;
+        }
+        if (m != 2)
+          continue;
+        double E_prev = 0.0, t_prev = -1e18;
+        for (const auto &d : core.takeSwitchDiags())
+        {
+          const double gam = std::exp(-std::max(0.0, d.t - t_prev) / c.T_g);
+          const bool judged = d.is_switch && d.reason != "goal";
+          const double want = judged ? std::max(0.0, gam * E_prev + (d.C_old - d.C_new - c.eps_w)) : std::max(0.0, gam * E_prev - c.eps_w);
+          if (d.reason != "goal")
+          {
+            worst = std::max(worst, std::fabs(want - d.evidence));
+            rec_ok = rec_ok && std::fabs(want - d.evidence) < 1e-9;
+          }
+          if (judged && d.accepted && !d.forced && !d.safety_override)
+            accept_ok = accept_ok && d.evidence >= c.eps_w - 1e-12 && (!d.dwell_applied || d.dwell_left <= 0.0);
+          if (judged && !d.accepted)
+            accept_ok = accept_ok && (d.evidence < c.eps_w || (d.dwell_applied && d.dwell_left > 0.0));
+          E_prev = (d.is_switch && d.accepted) ? 0.0 : d.evidence;
+          t_prev = d.t;
+        }
+      }
+      std::printf("[INFO] T11 route side changes over 200 replans with an alternating risk source: no R4 %d, R4 (it. 1) %d, "
+                  "R4-new %d\n", changes[0], changes[1], changes[2]);
+      check(rec_ok, "T11 R4-new: evidence follows E = max(0, exp(-dt/T_g) E + (C_old - C_new - eps_w)) on every search (worst " +
+                        g3(worst) + ")");
+      check(accept_ok, "T11 R4-new: a voluntary switch is accepted iff E >= eps_w and the applicable dwell has elapsed");
+      check(changes[2] <= changes[0], "T11 R4-new: no more route changes than without hysteresis");
+    }
+    // (d) safety override: a stationary obstacle on the current route side inside the dwell window
+    {
+      int held = -1, forced = -1;
+      double d_old = 0.0, d_new = 0.0;
+      for (int m = 0; m < 2; ++m)
+      {
+        PlannerCore core;
+        core.configure(cfgFor(6, [&](Fixes &f) {
+          f.diag_log = f.r4_switch_hysteresis = f.r4n_leaky_evidence = true;
+          f.r4s_safety_override = m == 1;
+        }));
+        core.setGoal(goal, p0);
+        core.replanGlobal(0.0, g, p0, Eigen::Vector3d::Zero(), {}, "goal");
+        const double side = sideOf(core.path()) >= 0.0 ? 1.0 : -1.0;
+        core.takeSwitchDiags();
+        core.replanGlobal(0.5, g, p0, Eigen::Vector3d::Zero(), {obstacle("x", Eigen::Vector3d(6.0, side * 1.5, 1.5), {0, 0, 0})},
+                          "periodic");
+        for (const auto &d : core.takeSwitchDiags())
+          if (d.is_switch)
+          {
+            (m == 0 ? held : forced) = d.accepted;
+            if (m == 1)
+              d_old = d.d_old_pred, d_new = d.d_new_pred, forced = forced && d.safety_override;
+          }
+      }
+      std::printf("[INFO] T11 safety override: predicted clearance old route %.2f m, new route %.2f m\n", d_old, d_new);
+      check(held == 0, "T11 R4-s off: the dwell holds the switch away from an obstacle on the current route");
+      check(forced == 1 && d_old < 0.0 && d_new > d_old,
+            "T11 R4-s on: the old route's predicted safety-sphere entry within tau2 forces the switch past the dwell");
+    }
+  }
+
   // ---- T7 R5 gating: threat-free mode only after T_c without lambda > 0 ----
   {
     const OccupancyGrid open = openGrid(c.rInfl());
@@ -514,14 +671,17 @@ int main(int argc, char **argv)
     check(n > 200 && viol == 0, "T8 S1: chosen v satisfies rho <= 1 - lambda whenever any feasible candidate does");
   }
 
-  // ---- T10 R1d: whenever a feasible moving candidate exists, one of them has zero cone slack ----
+  // ---- T10 R1d: whenever a feasible moving candidate exists, one of them has zero cone slack (R1b and R1e slack) ----
+  for (int variant = 0; variant < 2; ++variant)
   {
     const OccupancyGrid grid = golden::planningEasy(c.rInfl());
     int n = 0, ok = 0, chose_zero = 0;
+    const std::string tag = variant == 0 ? "R1d+R1b" : "R1d+R1e";
     for (int k = 0; k < 2000; ++k)
     {
       Switches sw;
-      sw.fx.r1d_feasible_cone = sw.fx.r1b_continuous_slack = true;
+      sw.fx.r1d_feasible_cone = true;
+      (variant == 0 ? sw.fx.r1b_continuous_slack : sw.fx.r1e_lowspeed_angle) = true;
       LocalProblem P;
       P.p_ref = Eigen::Vector3d(3.0 + 8.0 * U(rng), 6.0 * U(rng), 1.5);
       P.goal = P.p_ref + Eigen::Vector3d(U(rng), U(rng), 0).normalized() * 8.0;
@@ -550,8 +710,9 @@ int main(int argc, char **argv)
       ok += zero_slack;
       chose_zero += lp.solve(P).v.norm() < 1e-9;
     }
-    std::printf("[INFO] T10 R1d: %d problems with a feasible moving candidate; v* = 0 chosen in %d of them\n", n, chose_zero);
-    check(n > 500 && ok == n, "T10 R1d: a feasible moving candidate with zero cone slack exists in every such problem (" +
+    std::printf("[INFO] T10 %s: %d problems with a feasible moving candidate; v* = 0 chosen in %d of them\n", tag.c_str(), n,
+                chose_zero);
+    check(n > 500 && ok == n, "T10 " + tag + ": a feasible moving candidate with zero cone slack exists in every such problem (" +
                                   std::to_string(ok) + "/" + std::to_string(n) + ")");
   }
 
@@ -562,20 +723,26 @@ int main(int argc, char **argv)
     {
       std::string name;
       int group;
-      bool fixes;
+      int fixes; // 0 none, 1 iteration-1 set (R1b), 2 iteration-2 set (R1e, R4-m)
     };
-    const std::vector<Arm> arms = {{"g3 frozen", 3, false}, {"g6 frozen", 6, false}, {"g6 + R1-R5", 6, true}};
+    const std::vector<Arm> arms = {{"g3 frozen", 3, 0}, {"g6 frozen", 6, 0}, {"g6 fix it1", 6, 1}, {"g6 fix it2", 6, 2}};
+    auto scenarios = golden::loopScenarios();
+    scenarios.push_back({"gap_north", {0, 0, 1.5}, {0, 14, 1.5}, {}, 600}); // M1 route through the narrow gap, no obstacle
     std::printf("[INFO] T9 offline kinematic loop on planning_easy (60 s cap):\n");
     std::printf("[INFO] %-12s %-12s %8s %9s %11s %12s %9s %10s %9s\n", "scenario", "arm", "reached", "length_m",
                 "stop_cycles", "max_stop_run", "switches", "fallbacks", "occupied");
-    for (const auto &sc : golden::loopScenarios())
+    for (const auto &sc : scenarios)
       for (const auto &arm : arms)
       {
         PlannerCore core;
         core.configure(cfgFor(arm.group, [&](Fixes &f) {
-          if (arm.fixes)
-            f.r1a_reachable_cone = f.r1b_continuous_slack = f.r1c_heading_memory = f.r1d_feasible_cone = f.r2a_kappa_decay =
-                f.r2b_kappa_local_excluded = f.r3_relevant_trigger = f.r4_switch_hysteresis = f.r5_mode_gating = true;
+          if (arm.fixes > 0)
+            f.r1a_reachable_cone = f.r1c_heading_memory = f.r1d_feasible_cone = f.r2a_kappa_decay =
+                f.r2b_kappa_local_excluded = f.r3_relevant_trigger = f.r4_switch_hysteresis = true;
+          if (arm.fixes == 1) // iteration-1 set (R1b, R4, R5)
+            f.r1b_continuous_slack = f.r5_mode_gating = true;
+          if (arm.fixes == 2) // iteration-2 all_on (R1e, R4-new with R4-m)
+            f.r1e_lowspeed_angle = f.r4m_dwell_free_only = f.r4n_leaky_evidence = f.r4s_safety_override = true;
         }));
         Eigen::Vector3d p = sc.start, v = Eigen::Vector3d::Zero();
         core.setGoal(sc.goal, p);

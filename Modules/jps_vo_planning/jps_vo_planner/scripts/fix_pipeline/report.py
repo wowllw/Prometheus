@@ -117,22 +117,73 @@ def classify(tests):
     return out
 
 
-def write(R, st, tag, branch):
+def gate_files(it):
+    """Gate-failure reports of iteration `it` (iteration 1 files carry no iteration suffix)."""
+    out = []
+    for x in sorted(os.listdir(PIPE_DIR), key=lambda x: os.path.getmtime(os.path.join(PIPE_DIR, x))):
+        if not x.startswith('GATE_FAILURE_'):
+            continue
+        m = re.search(r'_iter(\d+)_', x)
+        if (int(m.group(1)) if m else 1) == it:
+            out.append(x)
+    return out
+
+
+def gate_info(x):
+    t = open(os.path.join(PIPE_DIR, x)).read()
+    g = re.search(r'^- gate: (.*)$', t, flags=re.M)
+    tm = re.search(r'^- time: (.*)$', t, flags=re.M)
+    d = re.search(r'## Detail\n\n```\n(.*?)\n```', t, flags=re.S)
+    m = re.search(r'```json\n(.*)\n```', t, flags=re.S)
+    return {'file': x, 'time': tm.group(1) if tm else '', 'gate': g.group(1) if g else '',
+            'detail': d.group(1).strip() if d else '', 'data': json.loads(m.group(1)) if m else {}}
+
+
+def v1_table(w, root):
+    v1dir = os.path.join(root, 'v1')
+    presets = sorted((d for d in os.listdir(v1dir) if os.path.isfile(os.path.join(v1dir, d, 'v1_summary.csv'))) if os.path.isdir(v1dir) else [],
+                     key=lambda d: os.path.getmtime(os.path.join(v1dir, d, 'batch_index.csv')))
+    w('| Preset | Variant | ok | M2 [m] | M3 [°] | M6 | Σ stall breaks | path switches | min dyn. clearance [m] | duration [s] | '
+      'gap time [s] | gap median speed [m/s] | gap low-speed share | Σ R4 overrides |')
+    w('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|')
+    for d in presets:
+        rows = list(csv.DictReader(open(os.path.join(v1dir, d, 'v1_summary.csv'))))
+        for v in sorted({x['variant'] for x in rows}):
+            s = [x for x in rows if x['variant'] == v]
+            dyn = [float(x['min_dyn']) for x in s if x['min_dyn'] not in ('', 'N/A')]
+            gap = v == 'M1_three_way'
+            w('| %s | %s | %d/%d | %s | %s | %s | %d | %s | %s | %s | %s | %s | %s | %s |' % (
+                d, v, sum(int(x['success']) for x in s), len(s), f(med([x['M2'] for x in s]), 2), f(med([x['M3'] for x in s]), 1),
+                f(med([x['M6'] for x in s]), 1), sum(int(float(x['stall_breaks'] or 0)) for x in s),
+                f(med([x['path_switches'] for x in s]), 1), f(min(dyn), 3) if dyn else '—', f(med([x.get('duration', '') for x in s]), 1),
+                f(med([x.get('gap_time', '') for x in s]), 1) if gap else '—',
+                f(med([x.get('gap_median_speed', '') for x in s]), 2) if gap else '—',
+                f(med([x.get('gap_low_share', '') for x in s]), 3) if gap else '—',
+                sum(int(float(x.get('r4_overrides') or 0)) for x in s)))
+
+
+def write(R, st, tag, branch, root):
     repo = R['repo']
     lines = []
     w = lines.append
+    it = int(st.get('iteration', 1))
     tag_obj = sh(['git', 'rev-parse', tag], cwd=repo).stdout.strip()
     tag_commit = sh(['git', 'rev-parse', tag + '^{commit}'], cwd=repo).stdout.strip()
     commits = sh(['git', 'log', '--oneline', '%s..%s' % (tag, branch)], cwd=repo).stdout.strip()
-    s0, s2, v1, v2, v3 = st.get('stage0', {}), st.get('stage2_result', {}), st.get('v1', {}), st.get('v2', {}), st.get('v3', {})
-    tests = load_tests()
+    s0, dr, s2 = st.get('stage0', {}), st.get('dryrun', {}), st.get('stage2_result', {})
+    v1, v2, v3 = st.get('v1', {}), st.get('v2', {}), st.get('v3', {})
+    p = os.path.join(root, 'v3', 'v3_tests.csv')
+    tests = list(csv.DictReader(open(p))) if v3.get('done') and os.path.isfile(p) else []
     cls = classify(tests)
+    gates = [gate_info(x) for x in gate_files(it)]
 
-    w('# fix_coupling_artifacts — pipeline report (supplementary analysis, thesis §4.5)')
+    w('# fix_coupling_artifacts — pipeline report (iteration %d; supplementary analysis, thesis §4.5)' % it)
     w('')
     w('> Chapter 4 reports the frozen baseline `%s` and is unchanged. Everything here is a post-campaign engineering '
-      'patch evaluated as supplementary analysis. g6 vs g3 is the joint C2 + C3 effect only. V0 log diagnostics are '
-      'correlational clues, not evidence. Unit tests are not closed-loop evidence; only V1–V3 simulations are.' % tag)
+      'patch evaluated as supplementary analysis. Evidence classes: **[code]** fact read from the source, **[log]** clue '
+      'from run logs (association only), **[sim]** result of the ablation simulations — the only class accepted as '
+      'evidence for or against mitigation. g6 vs g3 is the joint C2 + C3 effect only. Unit tests and the dry run are not '
+      'closed-loop evidence.' % tag)
     w('')
     w('## 1 Git baseline protection')
     w('')
@@ -141,223 +192,181 @@ def write(R, st, tag, branch):
     w('| Tag | `%s` (annotated, object `%s`) → commit `%s` |' % (tag, tag_obj[:12], tag_commit[:12]))
     w('| Protected base branch | `%s`, commit unchanged: `%s` |' % (s0.get('base_branch'), s0.get('assets', {}).get('base_branch_commit', '')[:12]))
     w('| Development branch | `%s` |' % branch)
-    w('| Read-only assets | Chapter-4 doc, frozen 720-cell dataset, frozen analysis outputs: hashes identical at every stage (Gate-I) |')
+    w('| Read-only assets | Chapter-4 doc, frozen 720-cell dataset, frozen analysis outputs: SHA-256 identical at every gate (Gate-I) |')
     w('| Uncommitted user files left untouched | %s |' % ', '.join('`%s`' % x for x in s0.get('uncommitted_user_files', [])))
     w('')
     w('Commits on `%s`:' % branch)
     w('')
     w('```\n%s\n```' % commits)
     w('')
-    stops = sorted(x for x in os.listdir(PIPE_DIR) if x.startswith('GATE_FAILURE_'))
-    w('Gate stops during the pipeline run, in order (full reports in `%s`). A stop caused by a defect of the pipeline '
-      'itself was fixed and the pipeline resumed; a stop by a protocol gate ends the run:' % PIPE_DIR)
+    w('## 2 Iterations')
     w('')
-    for x in stops:
-        txt = open(os.path.join(PIPE_DIR, x)).read()
-        when = [l for l in txt.split('\n') if l.startswith('- time:')]
-        gate = [l for l in txt.split('\n') if l.startswith('- gate:')]
-        det = txt.split('```')[1].strip().split('\n')[0][:300] if '```' in txt else ''
-        w('- `%s` %s %s: %s' % (x, when[0][2:] if when else '', gate[0][2:] if gate else '', det))
-    if not stops:
-        w('- none')
+    for h in st.get('history', []):
+        hv1 = h.get('v1') or {}
+        w('- **Iteration %d** (closed %s): %s' % (h['iteration'], h.get('closed', ''), h.get('note', '')))
+        w('  - V1 steps completed: %s; adjustments: %s' % (', '.join(k for k, r in hv1.get('steps', {}).items() if r.get('done')) or 'none',
+                                                         '; '.join(hv1.get('adjust', [])) or 'none'))
+        for x in gate_files(h['iteration']):
+            gi = gate_info(x)
+            w('  - gate stop `%s`: %s — %s' % (x, gi['gate'], gi['detail'].split('\n')[0][:200]))
+    w('- **Iteration %d** (this report).' % it)
     w('')
-    w('## 2 Build and offline tests')
+    w('## 3 Dry run (sandbox copy of the tag; repository untouched)')
+    w('')
+    if dr.get('passed'):
+        w('- Edit layers applied on the frozen sources (every anchor matched exactly once): %s.' % '; '.join(dr['layers']))
+        w('- Full diff: %d files, +%d / −%d lines (sha256 `%s`), kept in `%s`.' % (
+            dr['diff']['files'], dr['diff']['added'], dr['diff']['removed'], dr['diff']['sha256'][:16], dr['diff']['path']))
+        w('- Compilation with the package flags: no errors, no new warnings (core library, node translation units with their ROS flags, all test programs).')
+        w('- Frozen `gen_golden` vs sandbox `gen_golden` (all flags false): %s.' % dr.get('T0_sandbox'))
+        w('- Existing tests in the sandbox: %s.' % ', '.join('%s %s PASS' % (k[9:], x['pass']) for k, x in dr.items() if k.startswith('existing_')))
+        w('- Sandbox `test_fixes`: %s PASS, %s FAIL. Log writers of cycles.csv / paths.csv unchanged: %s.' % (
+            dr['test_fixes']['pass'], dr['test_fixes']['fail'], ', '.join(dr.get('log_format_functions', []))))
+    else:
+        w('- Not passed in this iteration.')
+    w('')
+    dc = st.get('dryrun_check', {})
+    if dc:
+        w('**Phase A check** of `%s` and the sandbox test output: layers %s; problems: %s.' % (
+            dc.get('console'), dc.get('layers'), dc.get('problems') or 'none'))
+        w('')
+        w('| Implementation checklist | Status |')
+        w('|---|---|')
+        for k, x in dc.get('checklist', {}).items():
+            w('| %s | %s |' % (k, x))
+        w('')
+        w('| Test | Result (sandbox) |')
+        w('|---|---|')
+        for k, x in dc.get('tests', {}).items():
+            w('| %s | %s |' % (k, x))
+        w('')
+    for x in st.get('dryrun_superseded', []):
+        w('- Superseded dry run (edit sources changed afterwards; fingerprint `%s`): %s PASS / %s FAIL.' % (
+            str(x.get('fingerprint'))[:16], x.get('test_fixes', {}).get('pass'), x.get('test_fixes', {}).get('fail')))
+    w('')
+    w('## 4 Stage 0–2 (deployment)')
     w('')
     for t in s2.get('existing_tests', []):
         r = s2.get(t, {})
         w('- Existing `%s`: exit %s, %s PASS, %s FAIL.' % (t, r.get('exit'), r.get('pass'), r.get('fail')))
     g = s2.get('golden', {})
-    w('- Frozen reference built from `%s` with the package flags `%s`: %s bytes, sha256 `%s`.' % (tag, g.get('flags'), g.get('bytes'), str(g.get('sha256'))[:16]))
-    w('- Branch `gen_golden` with every flag at its default (false): %s to the frozen reference.' % s2.get('T0_branch_gen_golden', '—'))
-    w('- Log-format identity (source level): the frozen lines of %s are unchanged; additions are guarded by the fix flags '
-      'and never write to `cycles.csv` / `paths.csv`.' % ', '.join('`%s`' % x for x in s2.get('log_format_functions', [])))
+    if g:
+        w('- Frozen reference built from `%s` with `%s`: %s bytes; branch `gen_golden` (flags false): %s.' % (
+            tag, g.get('flags'), g.get('bytes'), s2.get('T0_branch_gen_golden', '—')))
     tf = s2.get('test_fixes', {})
-    w('- `test_fixes`: %s PASS, %s FAIL. Gate-T0: %s' % (tf.get('pass'), tf.get('fail'), '; '.join(tf.get('T0', []))))
-    for i in tf.get('info', []):
-        w('  - `%s`' % i)
+    if tf:
+        w('- `test_fixes` (catkin build): %s PASS, %s FAIL. Gate-T0: %s' % (tf.get('pass'), tf.get('fail'), '; '.join(tf.get('T0', []))))
+        for i in tf.get('info', []):
+            w('  - `%s`' % i)
     w('')
-    w('## 3 V1 smoke ladder (g6; S3_climb_ne, head_on, M1_three_way; development seeds 101–103)')
+    w('## 5 V1 pre-screening (g6; S3_climb_ne, head_on, M1_three_way; seeds 101–103) [sim, n = 3 per cell, descriptive]')
     w('')
-    w('Descriptive only (n = 3 development seeds per cell; no inference). One row per preset that ran, in run order; '
-      'medians over the three seeds, sums for counts.')
+    v1_table(w, root)
     w('')
-    w('| Preset | Variant | ok | M2 [m] | M3 [°] | M6 | Σ stall breaks | low-speed share | path switches | min dyn. clearance [m] | replans (Σ) |')
-    w('|---|---|---|---|---|---|---|---|---|---|---|')
-    v1dir = os.path.join(STATE_ROOT, 'v1')
-    presets = sorted((d for d in os.listdir(v1dir) if os.path.isfile(os.path.join(v1dir, d, 'v1_summary.csv'))) if os.path.isdir(v1dir) else [],
-                     key=lambda d: os.path.getmtime(os.path.join(v1dir, d, 'batch_index.csv')))
-    for d in presets:
-        rows = list(csv.DictReader(open(os.path.join(v1dir, d, 'v1_summary.csv'))))
-        for v in sorted({x['variant'] for x in rows}):
-            s = [x for x in rows if x['variant'] == v]
-            rp = {}
-            for x in s:
-                for kv in x['replans'].split():
-                    k, n = kv.split(':')
-                    rp[k] = rp.get(k, 0) + int(n)
-            dyn = [float(x['min_dyn']) for x in s if x['min_dyn'] not in ('', 'N/A')]
-            w('| %s | %s | %d/%d | %s | %s | %s | %d | %s | %s | %s | %s |' % (
-                d, v, sum(int(x['success']) for x in s), len(s), f(med([x['M2'] for x in s]), 2), f(med([x['M3'] for x in s]), 1),
-                f(med([x['M6'] for x in s]), 1), sum(int(float(x['stall_breaks'] or 0)) for x in s),
-                f(med([x['low_speed_share'] for x in s]), 3), f(med([x['path_switches'] for x in s]), 1),
-                f(min(dyn), 3) if dyn else '—', ' '.join('%s:%d' % kv for kv in sorted(rp.items()))))
-    w('')
-    w('Gate outcome per ladder step:')
+    w('Pre-registered V1 gates: no collision and every goal reached; minimum dynamic clearance not more than 0.05 m below '
+      'diag_only (same variant and seed); M1_three_way narrow-gap traversal at most 2 × the diag_only time of the same seed.')
     w('')
     for name, rec in v1.get('steps', {}).items():
-        w('- %s (%s, units %s): unsafe runs %d, avoidance delays %d.' % (name, rec.get('preset'), '+'.join(rec.get('units', [])) or '—',
-                                                                     len(rec.get('unsafe', [])), len(rec.get('r4_delays', []))))
-    w('- Switch adjustments made by the V1 gates: %s' % ('; '.join(v1.get('adjust', [])) or 'none'))
-    gate = last_gate()
-    if gate and not v1.get('done'):
-        w('')
-        w('### Gate stop in V1')
-        w('')
-        w('`%s` — %s: %s' % (gate['file'], gate['gate'], gate['detail']))
-        for key in ('r4_delays', 'unsafe', 'unsafe_after_r4m', 'r4_delays_after_r4m', 'unsafe_without_r4'):
-            if gate['data'].get(key):
-                w('')
-                w('%s:' % key)
-                w('')
-                for u in gate['data'][key]:
-                    w('- `%s`' % {k: (round(x, 3) if isinstance(x, float) else x) for k, x in u.items()})
-        for u in gate['data'].get('unsafe_after_r4m', []) + gate['data'].get('unsafe', []) + gate['data'].get('unsafe_without_r4', []):
-            w('')
-            w('Timeline of `%s` (generated from cycles.csv / cycles_ext.csv):' % u['log_dir'])
-            w('')
-            for line in A.run_timeline(u['log_dir']):
-                w('- ' + line)
+        w('- %s (units %s): gate failures %d%s; dwell-held switches under threat followed by a clearance drop > 0.05 m: %d.' % (
+            name, '+'.join(rec.get('units', [])) or '—', len(rec.get('gate_failures', [])),
+            (' — %s' % rec['gate_failures']) if rec.get('gate_failures') else '', len(rec.get('r4_delays', []))))
+    if v1.get('done'):
+        w('- `all_on` after V1: %s' % ', '.join(k for k, x in v1.get('all_on', {}).items() if x))
     w('')
-    w('## 4 V2 screening (seeds 1–5; g3, g5, g6 × all_off / all_on × 6 variants)')
+    w('## 6 V2 pre-screening ablation (seeds 1–3; g3, g5, g6 × all_off / all_on × 6 variants) [sim, n = 3, descriptive]')
     w('')
-    if not v2.get('rounds'):
-        w('Not executed: the pipeline stopped before V2 (gate stop above).')
-    for rr in v2.get('rounds', []):
-        on_units = [u for u in ('r1a_reachable_cone', 'r2a_kappa_decay', 'r3_relevant_trigger', 'r4_switch_hysteresis',
-                                'r4m_dwell_free_only', 'r5_mode_gating') if rr['on_flags'].get(u)]
-        w('- Round %d (ON flags include %s): gate failures: %s' % (rr['round'], ', '.join(on_units), rr['gate_failures'] or 'none'))
-    for b in v2.get('bisect', []):
-        w('- Bisection %s (units %s): %s' % (b['preset'], '+'.join(b['units']), 'failure reproduced' if b['failures'] else 'not reproduced'))
-    if v2.get('rounds'):
-        w('- Units disabled by V2: %s' % (', '.join(v2.get('disabled_units', [])) or 'none'))
-        w('- Gates: no collision; no success loss per group; minimum static/dynamic clearance per group×variant not '
-          'lower than all_off by more than 0.05 m; mean of run M1 P95 per group not above 1.2 × all_off.')
-    if v2.get('rounds'):
-        rr = v2['rounds'][-1]
+    if v2.get('stats'):
+        w('Gates (all must hold): no collision; no success loss per group; worst static / dynamic clearance per group × '
+          'variant not lower than all_off by more than 0.05 m; mean run M1 P95 per group ≤ 1.2 × all_off. Result: %s.' % (
+              'all passed' if v2.get('passed') else 'FAILED: %s' % v2.get('gate_failures')))
         w('')
-        w('Descriptive medians of the final round (n = 5 per cell; with n = 5 the exact two-sided Wilcoxon test cannot '
-          'reach p < 0.05, so V2 is screening only):')
+        w('Medians per variant (off → on), and paired gaps over seeds (gap = g6 − g3, the joint C2 + C3 effect; with '
+          'n = 3 no test can reach p < 0.05, so this table only screens):')
         w('')
-        w('| Variant | Group | M2 off → on [m] | M3 off → on [°] | M6 off → on | stall breaks Σ off → on |')
-        w('|---|---|---|---|---|---|')
-        for v in sorted({x['variant'] for x in rr['off_summary']}):
-            for gname in sorted({x['group'] for x in rr['off_summary']}):
-                a = [x for x in rr['off_summary'] if x['variant'] == v and x['group'] == gname]
-                b = [x for x in rr['on_summary'] if x['variant'] == v and x['group'] == gname]
-                w('| %s | %s | %s → %s | %s → %s | %s → %s | %d → %d |' % (
-                    v, gname, f(med([x['M2'] for x in a])), f(med([x['M2'] for x in b])), f(med([x['M3'] for x in a]), 1),
-                    f(med([x['M3'] for x in b]), 1), f(med([x['M6'] for x in a]), 1), f(med([x['M6'] for x in b]), 1),
-                    sum(int(float(x['stall_breaks'] or 0)) for x in a), sum(int(float(x['stall_breaks'] or 0)) for x in b)))
+        w('| Variant | Metric | g3 off → on | g5 off → on | g6 off → on | gap g6off−g3off | gap g6on−g3off | g6on − g6off |')
+        w('|---|---|---|---|---|---|---|---|')
+        for r in v2['stats']:
+            w('| %s | %s | %s → %s | %s → %s | %s → %s | %s | %s | %s |' % (
+                r['variant'], r['metric'], r['g3_off'], r['g3_on'], r['g5_off'], r['g5_on'], r['g6_off'], r['g6_on'],
+                r['gap_off g6off-g3off'], r['gap_on g6on-g3off'], r['g6on-g6off']))
+        w('')
+        for k in sorted(x for x in v2 if x.startswith('side_effects_r')):
+            w('- Side-effect screen %s (ON worse than OFF in ≥ 2 variants of a group: M2 > 5 %%, M3 > 15°, M6 > 1, Σ stall '
+              'breaks > 2): %s' % (k[-2:], v2[k] or 'none'))
+        for b in v2.get('bisect', []):
+            w('- Bisection `%s` (units %s, %d cells): side effect %s; unsafe runs %d.' % (
+                b['preset'], '+'.join(b['units']), len(b['cells']), 'reproduced' if b['reproduced'] else 'not reproduced', len(b['unsafe'])))
+        w('- Repair units disabled by V2: %s' % (', '.join(v2.get('disabled_units', [])) or 'none'))
+    else:
+        w('Not executed in this iteration%s.' % (' (stopped before V2)' if gates else ''))
     w('')
-    w('## 5 V3 confirmation (fresh seeds 21–40; g3, g6 × all_off / all_on × 6 variants)')
-    w('')
-    if not v3.get('done'):
-        w('Not executed: the pipeline stopped before V3 (gate stop above).')
-        w('')
-        tests, cls = [], {}
-    w('' if not v3.get('done') else 'Contrasts per variant × metric, one Holm family of four: A = g6 fixed vs g6 frozen, B = g6 fixed vs g3 frozen, '
-      'C = g3 fixed vs g3 frozen, D = g6 frozen vs g3 frozen (the Chapter-4 gap re-measured on the V3 seeds). '
-      'Missing cells: %s. Unsafe runs: %s.' % (v3.get('missing'), {k: len(x) for k, x in v3.get('unsafe', {}).items()}))
+    w('## 7 V3 formal evaluation')
     w('')
     if v3.get('done'):
+        w('Contrasts per variant × metric, one Holm family of four: A = g6 fixed vs g6 frozen, B = g6 fixed vs g3 frozen, '
+          'C = g3 fixed vs g3 frozen, D = g6 frozen vs g3 frozen. Missing cells: %s. Unsafe runs: %s.' % (
+              v3.get('missing'), {k: len(x) for k, x in v3.get('unsafe', {}).items()}))
+        w('')
         w('| Variant | Metric | D: frozen gap g6−g3 | A: fixed − frozen (g6) | B: fixed g6 − frozen g3 | Outcome |')
         w('|---|---|---|---|---|---|')
-    for (v, m), c in sorted(cls.items()):
-        def cell(r):
-            return '%s [%s, %s], p_Holm %s' % (f(r['effect']), f(r['ci_low']), f(r['ci_high']), p4(r['p_holm'])) if r and r.get('p_holm') not in ('', None, 'None') else '—'
-        w('| %s | %s | %s | %s | %s | %s |' % (v, METRIC_NAME[m][0], cell(c['D']), cell(c['A']), cell(c['B']), c['class']))
-    w('')
-    if v3.get('done'):
-        w('Success (exact McNemar, fixed vs frozen g6): ' + '; '.join(
-            '%s %s/%s' % (t['variant'], p4(t['p_holm']), 'rates %s vs %s' % (f(t.get('rate_a'), 2), f(t.get('rate_b'), 2)))
-            for t in tests if t['contrast'] == 'A' and t['metric'] in ('goal_success', 'M4_success')) + '. Success is at or near '
-          'the ceiling; no success-rate improvement is claimed.')
+        for (v, m), c in sorted(cls.items()):
+            def cell(r):
+                return '%s [%s, %s], p_Holm %s' % (f(r['effect']), f(r['ci_low']), f(r['ci_high']), p4(r['p_holm'])) \
+                    if r and r.get('p_holm') not in ('', None, 'None') else '—'
+            w('| %s | %s | %s | %s | %s | %s |' % (v, METRIC_NAME[m][0], cell(c['D']), cell(c['A']), cell(c['B']), c['class']))
         w('')
-        w('### Template sentences (V3)')
+        for t in tests:
+            if t['metric'] in FOCUS + ['stall_breaks'] and t['contrast'] in ('A', 'B', 'D'):
+                lab = {'A': ('g6 with the repairs', 'g6 frozen'), 'B': ('g6 with the repairs', 'g3 frozen'),
+                       'D': ('g6 frozen', 'g3 frozen')}[t['contrast']]
+                w('- ' + sentence(t, *lab))
+    else:
+        w('**Not started — requires explicit manual confirmation.** Specification:')
         w('')
-    for t in tests:
-        if t['metric'] in FOCUS + ['stall_breaks'] and t['contrast'] in ('A', 'B', 'D'):
-            lab = {'A': ('g6 with the repairs', 'g6 frozen'), 'B': ('g6 with the repairs', 'g3 frozen'),
-                   'D': ('g6 frozen', 'g3 frozen')}[t['contrast']]
-            w('- ' + sentence(t, *lab))
+        w('- Seeds 21–40 (fresh, never used in V1/V2); all six variants; groups g3 and g6 (g5 optional) × `all_off` / '
+          '`all_on` (the V1-decided configuration); arms interleaved per seed; 480 runs (720 with g5), about 3 min each.')
+        w('- Per arm, the project\'s `post_process_ablation.py --index` (validity rules, M1–M6, Wilcoxon–Pratt, Holm, '
+          'bootstrap, exact McNemar). Cross-arm contrasts with the same functions, one Holm family per variant × metric: '
+          'A = g6 fixed vs g6 frozen, B = g6 fixed vs g3 frozen, C = g3 fixed vs g3 frozen, D = g6 frozen vs g3 frozen; '
+          'bootstrap 10 000 resamples, seed 20261026.')
+        w('- Start command after confirmation: `pipeline.py run-v3 --confirm-v3 [--with-g5]`.')
     w('')
+    if gates:
+        w('## 8 Gate stops in this iteration')
+        w('')
+        for gi in gates:
+            w('- `%s` (%s) — %s: %s' % (gi['file'], gi['time'], gi['gate'], gi['detail'].split('\n')[0][:300]))
+            for u in gi['data'].get('failures', []) + gi['data'].get('unsafe', []):
+                w('  - %s' % {k: (round(x, 3) if isinstance(x, float) else x) for k, x in u.items()})
+                if u.get('log_dir'):
+                    for line in A.run_timeline(u['log_dir']):
+                        w('    - ' + line)
+        w('')
     counts = {}
     for c in cls.values():
         counts[c['class']] = counts.get(c['class'], 0) + 1
-    w('## 6 Thesis material')
+    w('## 9 Thesis material')
     w('')
-    adjust = '; '.join(v1.get('adjust', []) + ['V2: %s disabled' % u for u in v2.get('disabled_units', [])]) or \
-        'no repair switch had to be disabled'
+    adjust = '; '.join(v1.get('adjust', [])) or 'no repair switch had to be disabled or downgraded'
+    w(PART_424.format(tag=tag))
     if v3.get('done'):
-        w(THESIS.format(tag=tag, counts='; '.join('%s: %d' % kv for kv in sorted(counts.items())) or 'no V3 results',
-                        adjust=adjust))
+        w(THESIS_DONE.format(tag=tag, adjust=adjust, counts='; '.join('%s: %d' % kv for kv in sorted(counts.items()))))
+    elif v2.get('passed'):
+        w(THESIS_PENDING.format(tag=tag, adjust=adjust))
     else:
-        gate = last_gate() or {}
-        stage = 'V1' if not v1.get('done') else ('V2' if not v2.get('passed') else 'V3')
-        w(THESIS.split('### §4.5')[0].format(tag=tag) + STOPPED.format(tag=tag, stage=stage, adjust=adjust,
-                                                       gate='%s (%s)' % (gate.get('gate', ''), gate.get('detail', ''))))
+        stage = 'V1' if not v1.get('done') else 'V2'
+        w(THESIS_STOPPED.format(tag=tag, stage=stage, adjust=adjust,
+                                gate='%s (%s)' % (gates[-1]['gate'], gates[-1]['detail'].split('\n')[0]) if gates else 'not run'))
+    w(COMMON_TAIL.format(tag=tag))
     text = '\n'.join(lines) + '\n'
     doc = os.path.join(os.path.dirname(R['chapter4_doc']), 'fix_coupling_artifacts_report.md')
     write_file(doc, text)
-    with open(os.path.join(PIPE_DIR, 'final_report.md'), 'w') as fh:
+    with open(os.path.join(PIPE_DIR, 'final_report_iter%d.md' % it), 'w') as fh:
         fh.write(text)
     log('report -> %s' % doc)
 
 
-STOPPED = '''### §4.5 Supplementary extended analysis: repair of the coupling defects
-
-**Scope.** This section reports a defect repair implemented in this work and the evaluation run on it. It does not
-replace §4.1–4.3, whose conclusions are derived only from the frozen baseline `{tag}`. The repaired planner is the
-frozen code plus repair items FX1–FX6, each behind a Boolean flag that defaults to false; with every flag off the
-planner output is byte-identical to the frozen reference (offline golden test T0) and the run-log writers are
-unchanged.
-
-**Protocol.** The evaluation was pre-registered as a gated sequence: V1 incremental smoke ladder (development seeds
-101–103), V2 screening (seeds 1–5) and V3 confirmation (fresh seeds 21–40). A failed gate stops the sequence.
-
-**Outcome.** The evaluation stopped at the {stage} safety gate: {gate}. Switch adjustments made before the stop:
-{adjust}. The later stages were not run. Consequently this work makes **no claim** that the repair mitigates the
-path-quality degradation of g6 relative to g3; the V1 observations (Appendix C) are descriptive clues from three
-development seeds per cell, not evidence. The repair remains available behind default-false flags, and the frozen
-baseline of Chapter 4 is unaffected.
-
-### Limitations (additions)
-
-- The frozen baseline contains coupling defects that degrade path quality even in static scenes; Chapter 4 reports it
-  with these defects.
-- The repair evaluation stopped at the {stage} safety gate, so whether the repair mitigates the degradation is not
-  established.
-- In the run that stopped the evaluation, the reference descended during a dynamic avoidance manoeuvre and was then
-  held at v = 0 below the goal height, advancing only through the stall breaker until the timeout. Why every moving
-  candidate was rejected there, and whether a repair item contributes, cannot be identified from a single run (the
-  same configuration's repeated attempt reached the goal).
-
-### Defence Q&A
-
-- *Why did g6 degrade relative to g3 in the baseline?* The coupling introduced defects that act even without moving
-  obstacles; statistically the effect is attributed only to C2 + C3 jointly.
-- *What does the thesis do about it?* Chapter 4 reports the frozen results unchanged; §4.2.4 explains the mechanisms
-  and labels the log evidence as associative; §4.5 documents the repair and its gated evaluation.
-- *What was repaired, and was it verified?* FX1–FX6 behind default-false flags, verified offline (golden identity, unit
-  tests). The closed-loop evaluation stopped at the {stage} safety gate; no mitigation claim is made.
-- *Why not modify the baseline directly?* Changing the model after the campaign and re-reporting would turn the
-  evaluation into tuning on the test results; the tag keeps Chapter 4 reproducible and the flags keep the repair
-  auditable and reversible.
-- *Why was the evaluation not simply continued?* The gates were fixed before any simulation; continuing past a failed
-  safety gate, or relaxing it after seeing the outcome, would invalidate the protocol.
-'''
-
-THESIS = '''### §4.2.4 (addition to the Chapter-4 discussion; frozen numbers only)
+PART_424 = '''### §4.2.4 (addition to the Chapter-4 discussion; frozen numbers only)
 
 In the frozen baseline (`{tag}`), g6 and the one-way series g3 both succeeded in all 120 runs, but g6 produced worse
 paths (§4.2.2): M2 was significantly longer in all six variants (paired median differences +0.241 m to +1.711 m), M3
@@ -369,50 +378,72 @@ combination jointly. Source inspection identified coupling defects able to produ
 guidance-cone slack with a zero-width cone at λ = 0, single-cycle κ feedback, a replanning trigger over all cached
 edges, no switching hysteresis); the post-hoc diagnostics of Appendix B are consistent with them but are associations,
 not causal evidence. Chapter 4 reports the frozen baseline; the repair is evaluated in §4.5.
+'''
 
-### §4.5 Supplementary extended analysis: repair of the coupling defects
-
-**Scope.** This section reports a defect repair completed in this work. It does not replace §4.1–4.3, whose
-conclusions are derived only from the frozen baseline `{tag}`. The repaired planner is the frozen code plus repair
-items FX1–FX6, each behind a Boolean flag that defaults to false; with every flag off the planner output is
+SCOPE = '''**Scope.** This section reports a defect repair implemented in this work and its evaluation. It does not replace
+§4.1–4.3, whose conclusions are derived only from the frozen baseline `{tag}`. The repaired planner is the frozen code
+plus repair items FX1–FX6, each behind a Boolean flag that defaults to false; with every flag off the planner output is
 byte-identical to the frozen reference (offline golden test T0) and the run-log writers are unchanged.
 
-**Repairs.** FX1 guidance-cone repair (reachable turn, continuous slack, heading memory, feasibility-preserving cone);
-FX2 κ peak-hold with exponential release and κ excluded from the local value; FX3 decision-relevant replanning
-trigger (positive increments on the remaining path, positive decreases off it); FX4 switching hysteresis (ε_w margin
-and T_g dwell, with the R4-m option that waives the dwell under a threat); FX5 threat-free gating of the cone width;
-FX6 ε-constraint (implemented and unit-tested, not part of the simulated repair set). No tuned parameter was added.
+**Protocol.** Pre-registered gated sequence: dry run in a sandbox; V1 incremental smoke ladder (development seeds
+101–103); V2 screening of {{g3, g5, g6}} × {{off, on}} × six variants (seeds 1–3); V3 confirmation on fresh seeds 21–40
+only after manual confirmation. A failed gate stops the sequence; the next iteration starts with a changed design and a
+new dry run, and every iteration is reported.
+'''
 
-**Protocol.** V1: incremental smoke ladder (development seeds 101–103). V2: screening of {{g3, g5, g6}} × {{off, on}} ×
-six variants, seeds 1–5, with pre-registered safety gates. V3: {{g3, g6}} × {{off, on}} × six variants on fresh seeds
-21–40, Wilcoxon signed-rank (Pratt), Holm, percentile bootstrap, exact McNemar. Switch adjustments made by the gates:
-{adjust}.
+THESIS_STOPPED = '''### §4.5 Supplementary extended analysis: repair of the coupling defects
 
-**Results.** Outcome counts over variant × {{M2, M3, M6}}: {counts}. The per-variant statements are the template
-sentences of §5 of this report; non-significant results are written "no evidence of a significant difference".
-Success rates were at the ceiling in both versions, and no success-rate improvement is claimed.
+''' + SCOPE + '''
+**Outcome.** The evaluation stopped at the {stage} gate: {gate}. Switch adjustments made before the stop: {adjust}.
+The later stages were not run, so this work makes **no claim** that the repair mitigates the path-quality degradation
+of g6 relative to g3; the V1/V2 observations are descriptive screening data, not evidence.
+'''
 
+THESIS_PENDING = '''### §4.5 Supplementary extended analysis: repair of the coupling defects (template; V3 pending)
+
+''' + SCOPE + '''
+**Screening outcome.** V1 and V2 passed their safety gates (switch adjustments: {adjust}). Screening with three seeds
+per cell is descriptive and cannot establish mitigation. **Formal results (V3):** ⟦to be filled from the V3 test
+table: per variant and metric, the fixed-vs-frozen g6 contrast and the remaining g6 − g3 gap, written with the
+Chapter-4 sentence template; non-significant results as "no evidence of a significant difference"⟧. Success rates
+are at the ceiling; no success-rate improvement is claimed.
+'''
+
+THESIS_DONE = '''### §4.5 Supplementary extended analysis: repair of the coupling defects
+
+''' + SCOPE + '''
+**Results.** Switch adjustments made by the gates: {adjust}. Outcome counts over variant × {{M2, M3, M6}}: {counts}.
+The per-variant statements are the template sentences of §7 of this report. Success rates are at the ceiling; no
+success-rate improvement is claimed.
+'''
+
+COMMON_TAIL = '''
 ### Limitations (additions)
 
 - The frozen baseline contains coupling defects that degrade path quality even in static scenes; Chapter 4 reports it
   with these defects.
-- The repair was evaluated in one simulated world; V2 is screening (n = 5); the flags-off equivalence was shown
-  offline and at source level for the log writers.
-- FX3's guarantee covers routes through cached edges; FX4 can delay a voluntary switch by at most T_g plus one
-  replanning period (none with R4-m under a threat).
+- The repair evaluation uses one simulated world; V1/V2 are screening with three seeds per cell.
+- FX3 guarantees decision consistency only for routes through cached edges; FX4 can delay a voluntary switch by at most
+  T_g plus one replanning period in threat-free mode (none under a threat with R4-m).
+- The frozen dynamic constraint (time-to-collision > τ₂ = 12 s) also applies to a stationary obstacle; near a goal that
+  lies on such an obstacle's safety sphere it admits only approach speeds ≤ (d − R)/τ₂ (a creeping approach). This is a
+  property of the frozen model, not of the repair, and it is not changed here.
 - The repaired version is a post-campaign patch; the conclusions of Chapter 4 rest on the frozen version.
 
 ### Defence Q&A
 
 - *Why did g6 degrade relative to g3 in the baseline?* The coupling introduced defects that act even without moving
-  obstacles (stopping made cheap at λ = 0, single-cycle κ, irrelevant global re-searches, no switching hysteresis).
-  Statistically the effect is attributed only to C2 + C3 jointly.
-- *What does the thesis do about it?* Chapter 4 reports the frozen results unchanged, including the degradation;
-  §4.2.4 explains the mechanisms and labels the log evidence as associative; §4.5 evaluates the repair.
-- *What was repaired and how was it verified?* FX1–FX5 (FX6 implemented, not simulated) behind default-false flags;
-  offline golden identity and unit tests; V1 ladder, V2 screening with safety gates, V3 confirmation on fresh seeds.
+  obstacles; statistically the effect is attributed only to C2 + C3 jointly.
+- *What does the thesis do about it?* Chapter 4 reports the frozen results unchanged; §4.2.4 explains the mechanisms
+  and labels the log evidence as associative; §4.5 documents the repair and its gated evaluation.
+- *What was repaired, and how was it verified?* FX1–FX6 behind default-false flags; a sandbox dry run and offline
+  golden identity before deployment; closed-loop V1/V2 screening with safety gates; V3 on fresh seeds only after
+  manual confirmation. Only the simulations count as evidence.
 - *Why not modify the baseline directly?* Changing the model after the campaign and re-reporting would turn the
   evaluation into tuning on the test results; the tag keeps Chapter 4 reproducible and the flags keep the repair
   auditable and reversible.
-- *Did any repair fail?* {adjust}.
+- *Did a repair item fail?* In iteration 1, V1 stopped at its safety gate (a mission failure). Runs with the
+  speed-proportional cone slack (R1b) showed long low-speed phases in a narrow gap that runs without it did not show
+  (an association from three seeds per cell, not a proven cause); R1b was replaced by R1e in iteration 2. Every
+  iteration and gate stop is listed in this report.
 '''

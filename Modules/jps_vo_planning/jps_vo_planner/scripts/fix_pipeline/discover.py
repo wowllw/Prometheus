@@ -90,6 +90,12 @@ def discover(repo):
     if not lib:
         raise GateFailure('Gate-0 discovery', 'no add_library in %s contains the coupling source' % R['cmake'])
     R['core_lib'], R['core_lib_srcs'] = lib[0], [os.path.join(pkg, s) for s in lib[1]]
+    for m in re.finditer(r'add_executable\(\s*(\w+)\s+([^)]*)\)', cm):
+        srcs = m.group(2).split()
+        if os.path.relpath(R['node_cpp'], pkg) in srcs:
+            R['node_target'], R['node_srcs'] = m.group(1), [os.path.join(pkg, s) for s in srcs]
+    if 'node_target' not in R:
+        raise GateFailure('Gate-0 discovery', 'no add_executable in %s builds the node source' % R['cmake'])
     fm = re.search(r'foreach\(\s*t\s+([^)]*)\)\s*\n\s*add_executable\(\$\{t\}\s+([^)\s]+)\$\{t\}\.cpp\)', cm)
     if not fm:
         raise GateFailure('Gate-0 discovery', 'no offline-test foreach loop in %s' % R['cmake'])
@@ -168,7 +174,8 @@ def discover(repo):
     R['bin_dir'] = os.path.join(ws, 'devel', 'lib', R['pkg_name'])
     R['flags_make'] = os.path.join(R['build_dir'], os.path.relpath(pkg, R['build_src']), 'CMakeFiles',
                                    R['core_lib'] + '.dir', 'flags.make')
-    for k in ('devel_setup', 'flags_make'):
+    R['node_flags_make'] = os.path.join(os.path.dirname(os.path.dirname(R['flags_make'])), R['node_target'] + '.dir', 'flags.make')
+    for k in ('devel_setup', 'flags_make', 'node_flags_make'):
         if not os.path.isfile(R[k]):
             raise GateFailure('Gate-0 discovery', '%s missing: %s' % (k, R[k]))
     return R
